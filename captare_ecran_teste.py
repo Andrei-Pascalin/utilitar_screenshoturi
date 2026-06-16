@@ -1,5 +1,33 @@
 #!/usr/bin/env python3
 
+"""
+comanda de creare executabil cu nuitka:
+
+de aici am aflat:
+https://dev.to/weisshufer/from-pyinstaller-to-nuitka-convert-python-to-exe-without-false-positives-19jf
+
+python -m nuitka --standalone --onefile --enable-plugin=tk-inter --windows-disable-console captare_ecran_teste.py
+--windows-disable-console = e deprecated dar pe py 3.14 si nuitka 4.1.2 merge,
+                            varianta moderna cu --windows-disable-console=disabled da eroare
+
+
+comanda de creare cu nume diferit: (atentie trebuie adaugat pyton.exe la exceptii la windows defender)
+python -m nuitka --standalone --onefile --enable-plugin=tk-inter --windows-disable-console --product-name="Utilitar_screenshoturi" --product-version="0.1" --output-filename="Utilitar_screenshoturi.exe" captare_ecran_teste.py
+
+comanda de creare cu pyinstaller:
+pyinstaller --onefile --windowed --name "Utilitar_Screenshoturi" captare_ecran_teste.py
+
+Descriere scurtă a capabilităților
+- Capturează ecranul stâng, ecranul drept sau o fereastră activă a SCDX (sau alta specificata)
+- Salvează imaginile în foldere structurate: work_dir\RC\SCI\step_X_1.
+- Suport pentru incrementare automată a numărului de pas după salvare.
+- Permite setarea RC, SCI, step și directorului de lucru din interfața GUI.
+- Salvează setările în fișierul setari_utilitar_screenshoturi.json.
+- Are hotkey global Win+Alt+U pentru captură rapidă ca sa nu dispara droddown-urile de la SCDX
+
+"""
+
+
 import re
 import time
 import argparse
@@ -38,12 +66,33 @@ if ctypes.windll.kernel32.GetLastError() == ERROR_ALREADY_EXISTS:
 
 from pathlib import Path
 import sys
+import tempfile
 
-if getattr(sys, "frozen", False):
-    APP_DIR = Path(sys.executable).parent
+# Determine application directory for settings storage.
+# When running as a frozen onefile (Nuitka/PyInstaller), prefer the
+# directory containing the original executable (`sys.argv[0]`) so
+# settings are written beside the EXE instead of the temporary
+# extraction folder.
+print(f"[DEBUG] sys.argv[0]: {sys.argv[0]}")
+print(f"[DEBUG] __file__: {Path(__file__).parent}")
+print (f"[DEBUG] sys.executable: {sys.executable}")
+
+is_frozen = getattr(sys, "frozen", False)
+exe_candidate = None
+if sys.argv and Path(sys.argv[0]).exists():
+    exe_candidate = Path(sys.argv[0])
+    if exe_candidate.suffix.lower() == ".exe":
+        is_frozen = True
+
+if is_frozen:
+    if exe_candidate is None:
+        exe_candidate = Path(sys.executable)
+    APP_DIR = exe_candidate.parent
+    print(f"[DEBUG] Running as frozen executable, using {exe_candidate} for APP_DIR")
 else:
+    print(f"[DEBUG] Running as script, using __file__ for APP_DIR")
     APP_DIR = Path(__file__).parent
-
+print(f"[DEBUG] Application directory: {APP_DIR}")
 SETTINGS_FILE = APP_DIR / "setari_utilitar_screenshoturi.json"
 
 # DEFAULT_WORK_DIR = Path.home() / "Liamis_testing"
@@ -277,6 +326,7 @@ class MyCaptareEcranApp:
         self.root.mainloop()
 
     def load_settings(self):
+        print(f"[DEBUG] Loading settings from {SETTINGS_FILE}")
         if SETTINGS_FILE.exists():
             try:
                 with SETTINGS_FILE.open("r", encoding="utf-8") as f:
@@ -292,8 +342,10 @@ class MyCaptareEcranApp:
                 "auto_increment_step": False,}
 
     def save_settings(self):
+        print(f"[DEBUG] Saving settings to {SETTINGS_FILE}")
         try:
             with SETTINGS_FILE.open("w", encoding="utf-8") as f:
+                print(f"[DEBUG] Writing settings to {SETTINGS_FILE}")
                 json.dump({"work_dir": self.work_dir_var.get(),
                             "rc": self.rc_var.get(),
                             "sci": self.sci_var.get(),
@@ -302,9 +354,10 @@ class MyCaptareEcranApp:
                             "app_window_name": self.app_window_name_var.get(),
                             },
                             f, indent=2)
-        except Exception:
-            # maybe print smth..
-            pass
+        except Exception as exc:
+            print(f"[DEBUG] Error: {exc}")
+            # maybe print smth.
+
 
     def on_close(self):
         """Handle window close event"""
