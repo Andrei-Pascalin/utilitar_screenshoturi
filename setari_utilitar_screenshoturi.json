@@ -1,8 +1,8 @@
 {
   "work_dir": "C:\\Liamis_testing",
-  "rc": "rc1",
-  "sci": "scv",
-  "step": "27",
+  "rc": "aa",
+  "sci": "dd",
+  "step": "1",
   "auto_increment_step": false,
   "app_window_name": "SMARTCataract DX"
 }
