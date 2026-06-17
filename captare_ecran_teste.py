@@ -19,7 +19,7 @@ pyinstaller --onefile --windowed --name "Utilitar_Screenshoturi" captare_ecran_t
 
 Descriere scurtă a capabilităților
 - Capturează ecranul stâng, ecranul drept sau o fereastră activă a SCDX (sau alta specificata)
-- Salvează imaginile în foldere structurate: work_dir\RC\SCI\step_X_1.
+- Salvează imaginile în foldere structurate: work_dir\RC\SCI\STEP_X\step_X_1.
 - Suport pentru incrementare automată a numărului de pas după salvare.
 - Permite setarea RC, SCI, step și directorului de lucru din interfața GUI.
 - Salvează setările în fișierul setari_utilitar_screenshoturi.json.
@@ -105,7 +105,8 @@ INVALID_CHARS = re.compile(r'[<>:"/\\|?*]')
 # Limit individual folder names to reduce path-length issues.
 MAX_COMPONENT_LENGTH = 180
 
-#  eroare funcky de resize a ferestrei
+# declar chestia asta globala pt că eroare funcky de resize a ferestrei utilitarului
+#  TODO: poate fi mutata in clasa MyCaptareEcranApp si sa fie self.sct
 sct = mss.MSS()
 
 
@@ -136,10 +137,205 @@ class Tooltip:
             self.tooltip = None
 
 
+class LogWidget:
+    """Custom log widget with buttons to open file explorer for each entry"""
+    def __init__(self, parent, app_instance):
+        self.parent = parent
+        self.app = app_instance
+        self.entries = []
+
+        # Create main container frame
+        self.container = tk.Frame(parent, bg="#f5f5f5")
+        self.container.pack(fill="both", expand=True, padx=11, pady=(4, 11))
+
+        # Create canvas and scrollbar
+        self.canvas = tk.Canvas(self.container, bg="#f5f5f5", highlightthickness=0)
+        self.scrollbar = ttk.Scrollbar(self.container, orient="vertical", command=self.canvas.yview)
+        self.scrollable_frame = tk.Frame(self.canvas, bg="#f5f5f5")
+
+        self.scrollable_frame.bind(
+            "<Configure>",
+            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        )
+
+        self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
+
+        self.canvas.pack(side="left", fill="both", expand=True, pady=(10, 0))
+        self.scrollbar.pack(side="right", fill="y")
+
+        # Enable mouse wheel scrolling
+        self.canvas.bind_all("<MouseWheel>", self._on_mousewheel)
+        self.canvas.bind_all("<Button-4>", self._on_mousewheel)
+        self.canvas.bind_all("<Button-5>", self._on_mousewheel)
+
+    def _on_mousewheel(self, event):
+        """Handle mouse wheel scrolling"""
+        if event.num == 5 or event.delta < 0:
+            self.canvas.yview_scroll(1, "units")
+        elif event.num == 4 or event.delta > 0:
+            self.canvas.yview_scroll(-1, "units")
+
+    def add_entry(self, path_str: str):
+        """Add an entry with an open button and selectable text"""
+        path = Path(path_str)
+
+        # Main entry container with card-like design
+        entry_frame = tk.Frame(self.scrollable_frame, bg="white", relief="flat", bd=0)
+        entry_frame.pack(fill="x", padx=8, pady=4)
+
+        # Add border/shadow effect using inner frame
+        inner_frame = tk.Frame(entry_frame, bg="white")
+        inner_frame.pack(fill="both", expand=True, padx=2, pady=2)
+
+        def on_enter(event):
+            """Hover effect"""
+            inner_frame.config(bg="#f0f8ff")
+            entry_frame.config(bg="#e8f4ff")
+
+        def on_leave(event):
+            """Restore normal state"""
+            inner_frame.config(bg="white")
+            entry_frame.config(bg="white")
+
+        entry_frame.bind("<Enter>", on_enter)
+        entry_frame.bind("<Leave>", on_leave)
+        inner_frame.bind("<Enter>", on_enter)
+        inner_frame.bind("<Leave>", on_leave)
+
+        # Button container (left side)
+        btn_frame = tk.Frame(inner_frame, bg="white")
+        btn_frame.pack(side="left", padx=(5, 8), pady=6)
+
+        def open_path():
+            if path.exists():
+                import subprocess
+                try:
+                    # Open file explorer and select the file
+                    subprocess.Popen(f'explorer /select,"{path}"')
+                except Exception as e:
+                    messagebox.showerror("Error", f"Failed to open: {e}")
+            else:
+                messagebox.showwarning("Path not found", f"The path does not exist:\n{path_str}\n\nRefreshing log...")
+                self.refresh_from_sci()
+
+        btn = tk.Button(btn_frame, text="📁", command=open_path,
+                       bg="#4CAF50", fg="white", font=("Times", 9, "bold"),
+                       padx=10, pady=4, relief="flat", cursor="hand2",
+                       activebackground="#45a049", activeforeground="white")
+        btn.pack()
+
+        # Text container (right side)
+        text_frame = tk.Frame(inner_frame, bg="white")
+        text_frame.pack(side="left", fill="both", expand=True, padx=(0, 5), pady=4)
+
+        # Create selectable text widget for the path
+        text_widget = tk.Text(text_frame, height=2, wrap="word", bg="white",
+                             fg="#333333", font=("Courier", 9), relief="flat",
+                             cursor="ibeam", bd=0, padx=8, pady=6)
+        text_widget.pack(fill="both", expand=True)
+
+        # Insert the path text
+        text_widget.insert("1.0", str(path_str))
+        text_widget.config(state="disabled")  # Make read-only but selectable
+
+        # Bind hover effects to text widget too
+        text_widget.bind("<Enter>", on_enter)
+        text_widget.bind("<Leave>", on_leave)
+
+        self.entries.append((entry_frame, path_str))
+
+    def clear(self):
+        """Clear all entries from the log"""
+        for entry_frame, _ in self.entries:
+            entry_frame.destroy()
+        self.entries.clear()
+
+    def _update_scroll_region(self):
+        """Update canvas scroll region and scroll to bottom"""
+        # Force complete layout update
+        self.scrollable_frame.update_idletasks()
+        self.canvas.update_idletasks()
+
+        # Update scrollregion with current bounding box
+        bbox = self.canvas.bbox("all")
+        if bbox:
+            self.canvas.configure(scrollregion=bbox)
+
+        # Update the parent window
+        try:
+            self.parent.update()
+        except Exception:
+            pass
+
+        # Scroll to bottom using a more forceful method
+        self.canvas.yview_scroll(999999, "units")
+
+    def refresh_from_sci(self):
+        """Refresh log by reading all PNG files from the SCI path"""
+        self.clear()
+        try:
+            work_dir = Path(self.app.work_dir_var.get().strip())
+            raw_rc = self.app.rc_var.get().strip()
+            raw_sci = self.app.sci_var.get().strip()
+
+            if not raw_rc or not raw_sci:
+                messagebox.showwarning("Configuration", "RC and SCI names are required.")
+                return
+
+            # Sanitize the names using the app's method
+            rc = self.app.sanitize_name(raw_rc)
+            sci = self.app.sanitize_name(raw_sci)
+
+            # Build the SCI path
+            sci_path = work_dir / rc / sci
+
+            if not sci_path.exists():
+                messagebox.showinfo("Info", f"Path does not exist yet:\n{sci_path}")
+                return
+
+            # Recursively find all PNG files
+            png_files = list(sci_path.glob("**/*.png"))
+
+            # Custom sorting: by step number first, then by photo index
+            def sort_key(file_path):
+                """Extract step number and photo index for sorting"""
+                try:
+                    # Get the parent folder name (e.g., "step_1")
+                    parent_name = file_path.parent.name
+                    # Extract step number from folder name (e.g., "step_1" -> 1)
+                    step_match = re.search(r'step_(\d+)', parent_name)
+                    step_num = int(step_match.group(1)) if step_match else 0
+
+                    # Get the filename without extension (e.g., "step1_5")
+                    file_stem = file_path.stem
+                    # Extract photo index (e.g., "step1_5" -> 5)
+                    index_match = re.search(r'step\d+_(\d+)', file_stem)
+                    photo_index = int(index_match.group(1)) if index_match else 0
+
+                    return (step_num, photo_index)
+                except Exception:
+                    return (0, 0)
+
+            png_files = sorted(png_files, key=sort_key)
+
+            if png_files:
+                for png_file in png_files:
+                    self.add_entry(str(png_file))
+                # Update scroll region after all entries are added
+                self._update_scroll_region()
+                messagebox.showinfo("Refresh complete", f"Found {len(png_files)} PNG file(s).")
+            else:
+                self.add_entry(f"No PNG files found in {sci_path}")
+                self._update_scroll_region()
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to refresh: {e}")
+
+
 class MyCaptareEcranApp:
     def __init__(self):
         self.root = None
-        self.log_text = None
+        self.log_widget = None
         self.app_hwnd = None
         self._hotkey_thread = None
         self._hotkey_thread_id = None
@@ -151,12 +347,15 @@ class MyCaptareEcranApp:
         self.step_var = None
         self.auto_increment_step_var = None
         self.app_window_name_var = None
+        self.step_no_index_delimiter_var = None
 
         self.save_left_button = None
         self.save_right_button = None
 
         # setting variable ---------------------------
         self.settings = self.load_settings()
+
+        self.step_no_index_delimiter_var = self.settings.get("step_no_index_delimiter", ".")
 
 
     def create_gui(self):
@@ -170,7 +369,11 @@ class MyCaptareEcranApp:
         self.rc_var = tk.StringVar(value=self.settings["rc"])
         self.sci_var = tk.StringVar(value=self.settings["sci"])
         self.step_var = tk.StringVar(value=self.settings["step"])
-        self.app_window_name_var = tk.StringVar(value="SMARTCataract DX")
+
+        # Initialize window name from list or use default
+        window_name_list = self.settings.get("app_window_name_list", [])
+        default_window_name = window_name_list[0] if window_name_list else "SMARTCataract DX"
+        self.app_window_name_var = tk.StringVar(value=default_window_name)
 
         vcmd = (self.root.register(self.validate_step), "%P")
 
@@ -178,11 +381,16 @@ class MyCaptareEcranApp:
         frame_window_name = ttk.Frame(self.root)
         frame_window_name.pack(fill="x", padx=PAD, pady=(PAD, 4))
         ttk.Label(frame_window_name, text="window name:").pack(side="left")
-        ttk.Entry(
+
+        # Replace Entry with Combobox for window name with history
+        window_name_combo = ttk.Combobox(
             frame_window_name,
             textvariable=self.app_window_name_var,
-            width=60
-        ).pack(side="left", fill="x", expand=True, padx=(5, 0))
+            values=window_name_list,
+            width=60,
+            state="normal"  # Allow editing while still showing dropdown
+        )
+        window_name_combo.pack(side="left", fill="x", expand=True, padx=(5, 0))
 
 
         # Work directory
@@ -275,7 +483,7 @@ class MyCaptareEcranApp:
             command=self.save_window
         )
         # Add tooltip to capture window button
-        Tooltip(self.save_window_button, "Capture active window\nKeyboard: Win+Alt+U")
+        Tooltip(self.save_window_button, "Capture active window\nKeyboard: Win+Alt+Z")
 
         self.save_right_button = ttk.Button(
             frame_save,
@@ -287,15 +495,21 @@ class MyCaptareEcranApp:
         self.save_window_button.grid(row=0, column=1, padx=5)
         self.save_right_button.grid(row=0, column=2, padx=5)
 
+        # Refresh button
+        frame_refresh = ttk.Frame(self.root)
+        frame_refresh.pack(fill="x", padx=PAD, pady=(4, PAD))
+
+        ttk.Button(
+            frame_refresh,
+            text="🔄 Refresh Log",
+            command=self.refresh_log
+        ).pack(side="left", fill="x", expand=False, padx=PAD)
+
         # ----------------------------------------------------
         # Screenshot log
         # ----------------------------------------------------
 
-        self.log_text = ScrolledText(self.root, height=7, wrap="none")
-        self.log_text.pack(fill="both", expand=True, padx=PAD, pady=(4, PAD))
-
-        # Make the log read-only by default.
-        self.log_text.config(state="disabled")
+        self.log_widget = LogWidget(self.root, self)
 
         self.root.update_idletasks()
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
@@ -305,10 +519,10 @@ class MyCaptareEcranApp:
         except Exception:
             # Non-fatal: if registration fails, continue without global hotkey
             pass
-        # Keyboard shortcuts: Win+Alt+U for capture window
-        # Tk bindings don't accept a direct 'Win' modifier. Bind Alt+u and
+        # Keyboard shortcuts: Win+Alt+Z for capture window
+        # Tk bindings don't accept a direct 'Win' modifier. Bind Alt+z and
         # verify the Windows key is held using GetAsyncKeyState.
-        def _on_shortcut_alt_u(event):
+        def _on_shortcut_alt_z(event):
             VK_LWIN = 0x5B
             VK_RWIN = 0x5C
             try:
@@ -320,7 +534,7 @@ class MyCaptareEcranApp:
             if win_left or win_right:
                 self.save_window()
 
-        self.root.bind("<Alt-u>", _on_shortcut_alt_u)
+        self.root.bind("<Alt-z>", _on_shortcut_alt_z)
 
         self.root.update_idletasks()
         self.root.mainloop()
@@ -330,28 +544,45 @@ class MyCaptareEcranApp:
         if SETTINGS_FILE.exists():
             try:
                 with SETTINGS_FILE.open("r", encoding="utf-8") as f:
-                    return json.load(f)
+                    settings = json.load(f)
+                    # Handle backwards compatibility: convert old string format to list
+                    if isinstance(settings.get("app_window_name"), str):
+                        old_value = settings["app_window_name"]
+                        settings["app_window_name_list"] = [old_value] if old_value else []
+                        del settings["app_window_name"]
+                    if "app_window_name_list" not in settings:
+                        settings["app_window_name_list"] = []
+                    return settings
             except Exception:
-                # maybe print smth..
-                pass
+                print(f"[DEBUG] Failed to load settings from {SETTINGS_FILE}, using defaults.")
 
         return { "work_dir": str(DEFAULT_WORK_DIR),
                 "rc": "",
                 "sci": "",
                 "step": "1",
-                "auto_increment_step": False,}
+                "auto_increment_step": False,
+                "step_no_index_delimiter": ".",
+                "app_window_name_list": []}
 
     def save_settings(self):
         print(f"[DEBUG] Saving settings to {SETTINGS_FILE}")
         try:
             with SETTINGS_FILE.open("w", encoding="utf-8") as f:
                 print(f"[DEBUG] Writing settings to {SETTINGS_FILE}")
+
+                # Add current window name to the list if not already present
+                current_window_name = self.app_window_name_var.get().strip()
+                window_name_list = self.settings.get("app_window_name_list", [])
+                if current_window_name and current_window_name not in window_name_list:
+                    window_name_list.append(current_window_name)
+
                 json.dump({"work_dir": self.work_dir_var.get(),
                             "rc": self.rc_var.get(),
                             "sci": self.sci_var.get(),
                             "step": self.step_var.get(),
                             "auto_increment_step": self.auto_increment_step_var.get(),
-                            "app_window_name": self.app_window_name_var.get(),
+                            "step_no_index_delimiter": self.step_no_index_delimiter_var,
+                            "app_window_name_list": window_name_list,
                             },
                             f, indent=2)
         except Exception as exc:
@@ -376,7 +607,7 @@ class MyCaptareEcranApp:
     def register_system_hotkey(self):
         MOD_ALT = 0x0001
         MOD_WIN = 0x0008
-        VK_U = 0x55  # 'U'
+        VK_Z = 0x5A  # 'Z'
         HOTKEY_ID = 1
 
         def _listener():
@@ -391,8 +622,8 @@ class MyCaptareEcranApp:
             user32_local = ctypes.windll.user32
             WM_HOTKEY = 0x0312
 
-            print("[DEBUG hotkey] Registering Win+Alt+U hotkey from listener thread...")
-            if not user32_local.RegisterHotKey(None, HOTKEY_ID, MOD_WIN | MOD_ALT, VK_U):
+            print("[DEBUG hotkey] Registering Win+Alt+Z hotkey from listener thread...")
+            if not user32_local.RegisterHotKey(None, HOTKEY_ID, MOD_WIN | MOD_ALT, VK_Z):
                 print("[DEBUG hotkey] RegisterHotKey failed in listener")
                 return
 
@@ -509,11 +740,13 @@ class MyCaptareEcranApp:
         return result[0] if result else 0
 
     def append_log(self, message: str):
-        """Append message to log text widget"""
-        self.log_text.config(state="normal")
-        self.log_text.insert("end", message + "\n")
-        self.log_text.see("end")  # Automatically scroll to newest entry.
-        self.log_text.config(state="disabled")
+        """Append message to log widget"""
+        self.log_widget.add_entry(message)
+        self.log_widget._update_scroll_region()
+
+    def refresh_log(self):
+        """Refresh the log by reading all PNG files from SCI path"""
+        self.log_widget.refresh_from_sci()
 
     def sanitize_name(self, value: str) -> str:
         """Sanitize filename/folder names"""
@@ -603,7 +836,7 @@ class MyCaptareEcranApp:
 
         # Find the next index for photos in this step
         step_number = int(raw_step)
-        prefix = f"step{step_number}_"
+        prefix = f"step{step_number}{self.step_no_index_delimiter_var.strip()}"
 
         # Search for existing files with this pattern
         existing_indices = []
@@ -638,6 +871,7 @@ class MyCaptareEcranApp:
         # Hide GUI so it is not included in the screenshot.
         self.root.iconify()
 
+        # if window capture is requested, activate the target window first
         if only_window:
             window_name = self.app_window_name_var.get().strip()
             if window_name:
@@ -650,6 +884,10 @@ class MyCaptareEcranApp:
         time.sleep(0.2)
 
         try:
+            # initially set the monitor region to capture as the full monitor
+            # and if only_window is True, adjust it to the client area of the target window
+            # some computation is needed to only get the client area (interior) of the window,
+            # excluding borders and title bar (SCDX has a bigger yet invisible custom window frame)
             to_capture = monitor
             if only_window and self.app_hwnd:
                 # Use client area (interior) instead of window rect (which includes borders/titlebar)
@@ -667,7 +905,7 @@ class MyCaptareEcranApp:
                     "height": bottom - top,
                 }
                 to_capture = region
-
+            # actually capture the screen region using mss which stands for "Multiple Screen Shots"
             shot = sct.grab(to_capture)
 
             image = Image.frombytes(
