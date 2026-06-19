@@ -1,10 +1,11 @@
 {
   "work_dir": "C:\\Liamis_testing",
   "rc": "RC01",
-  "sci": "SCI-4233-User Account Capability - ItAdmin Test Case Execution",
-  "step": "60",
+  "sci": "SCI-4229-User Account Capability \u2013 Technician Test Case Execution",
+  "step": "27",
   "auto_increment_step": false,
-  "step_no_index_delimiter": "_",
+  "create_step_folder": true,
+  "step_no_index_delimiter": ".",
   "app_window_name_list": [
     "SMARTCataract",
     "Andrei_VM",

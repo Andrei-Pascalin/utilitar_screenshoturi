@@ -1,0 +1,14 @@
+{
+  "work_dir": "C:\\Liamis_testing",
+  "rc": "RC01",
+  "sci": "SCI-4230-User Account Capability - Optometrist Test Case Execution",
+  "step": "24",
+  "auto_increment_step": false,
+  "create_step_folder": true,
+  "step_no_index_delimiter": ".",
+  "app_window_name_list": [
+    "SMARTCataract",
+    "Andrei_VM",
+    "Andrei_VM_RC01"
+  ]
+}
