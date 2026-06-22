@@ -1,10 +1,10 @@
 Descriere scurtă a capabilităților
-- Capturează ecranul stâng, ecranul drept sau o fereastră activă a SCDX (sau alta specificata)
+- Capturează ecranul stâng, ecranul drept sau o fereastră dorită
 - Salvează imaginile în foldere structurate: work_dir\RC\SCI\STEP_X\step_X_1.
 - Suport pentru incrementare automată a numărului de pas după salvare.
 - Permite setarea RC, SCI, step și directorului de lucru din interfața GUI.
 - Salvează setările în fișierul setari_utilitar_screenshoturi.json.
-- Are hotkey global Win+Alt+U pentru captură rapidă ca sa nu dispara droddown-urile de la SCDX
+- Are hotkey global Win+Alt+U pentru captură rapidă ca sa nu dispara droddown-urile de la app
 - Afișează un log cu căi către imaginile salvate, cu butoane pentru a deschide locația în Explorer.
 - Permite crearea unui fișier ZIP din conținutul folderului SCI, cu nume generat automat.
 - Suportă o listă de nume de ferestre pentru captură, cu istoric în dropdown și validare după titlu parțial.
@@ -14,7 +14,7 @@ Descriere scurtă a capabilităților
 
 
 Brief Description of Capabilities
-- Captures the left screen, right screen, or an active SCDX window (or another specified window).
+- Captures the left screen, right screen, or an app's window.
 - Saves images in a structured folder hierarchy: work_dir\RC\SCI\STEP_X\step_X_1.
 - Supports automatic incrementing of the step number after each save.
 - Allows configuring the RC, SCI, step number, and working directory through the GUI.
