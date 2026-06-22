@@ -18,8 +18,8 @@ comanda de creare cu pyinstaller:
 pyinstaller --onefile --windowed --name "Utilitar_Screenshoturi" captare_ecran_teste.py
 
 ***ultima folosita:
-comanda pt windows defender:
-python -m nuitka --standalone --remove-output --enable-plugin=tk-inter --windows-disable-console --windows-icon-from-ico="C:\Liamis_testing\scripturi\utilitar_screenshoturi\camera_gear_icon.ico" --product-version="0.2" --product-name="Utilitar Screenshoturi" --output-filename="Utilitar_screenshoturi.exe" --company-name="AndreiP" Utilitar_screenshoturi.py
+comanda finala de creare a executabilului cu nuitka, cu iconita personalizata, versiune produs, nume produs, companie, si includerea icoanei in date files ca sa fie disponibila la runtime pentru setarea iconitei ferestrei (altfel icoana e doar pentru fisierul EXE dar fereastra are iconita default python):
+python -m nuitka --standalone --remove-output --include-data-files=camera_gear_icon.ico=camera_gear_icon.ico --enable-plugin=tk-inter --windows-disable-console --windows-icon-from-ico="C:\Liamis_testing\scripturi\utilitar_screenshoturi\camera_gear_icon.ico" --product-version="0.2" --product-name="Utilitar Screenshoturi" --output-filename="Utilitar_screenshoturi.exe" --company-name="AndreiP" Utilitar_screenshoturi.py
 
 
 Descriere scurtă a capabilităților
@@ -29,10 +29,17 @@ Descriere scurtă a capabilităților
 - Permite setarea RC, SCI, step și directorului de lucru din interfața GUI.
 - Salvează setările în fișierul setari_utilitar_screenshoturi.json.
 - Are hotkey global Win+Alt+U pentru captură rapidă ca sa nu dispara droddown-urile de la SCDX
-
+- Afișează un log cu căi către imaginile salvate, cu butoane pentru a deschide locația în Explorer.
+- Permite crearea unui fișier ZIP din conținutul folderului SCI, cu nume generat automat.
+- Suportă o listă de nume de ferestre pentru captură, cu istoric în dropdown și validare după titlu parțial.
+- Gestionează erorile și oferă mesaje informative utilizatorului.
+- Asigură că doar o singură instanță a aplicației rulează simultan.
+- Permite setarea unui delimitator personalizat între numărul pasului și indexul fotografiei în numele fișierelor (implicit ".") pentru compatibilitate cu diferite convenții de denumire.
 """
 
 
+from logging import root
+from logging import root
 import re
 import time
 import argparse
@@ -564,7 +571,11 @@ class MyCaptareEcranApp:
         self.root.bind("<Alt-z>", _on_shortcut_alt_z)
 
         self.root.update_idletasks()
+        # +++++++++++++++++++++++++++++++++++++++++++
+        ico = Path(__file__).parent / "camera_gear_icon.ico"
+        self.root.iconbitmap(ico)
         self.root.mainloop()
+        # ============================end of gui creation
 
     def load_settings(self):
         print(f"[DEBUG] Loading settings from {SETTINGS_FILE}")
