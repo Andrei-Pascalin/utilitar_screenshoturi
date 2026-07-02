@@ -46,16 +46,18 @@ import argparse
 import tkinter as tk
 import json
 import mss
+import os
 import zipfile
 from datetime import datetime
 from pathlib import Path
 from tkinter import messagebox, ttk
 from tkinter.scrolledtext import ScrolledText
-from PIL import Image
+from PIL import Image, ImageTk
 
 # chestii de windows api
 import win32gui
 import win32con
+from send2trash import send2trash
 
 # ========================== 1 singura instanta:
 import ctypes
@@ -353,11 +355,338 @@ class LogWidget:
             messagebox.showerror("Error", f"Failed to refresh: {e}")
 
 
+class ImageBrowser:
+
+    THUMB_W = 150
+    THUMB_H = 120
+
+    def __init__(self, parent, app):
+        self.parent = parent
+        self.app = app
+
+        self.image_paths = []
+
+        self.visible_items = {}
+        self.selected_path = None
+        self.selected_index = None
+
+        self.preview_photo = None
+
+        self.original_image = None
+
+        self.frame = ttk.Frame(parent)
+
+        # -----------------------------
+        # Top thumbnail area
+        # -----------------------------
+
+        top = ttk.Frame(self.frame)
+        top.pack(fill="x")
+
+        self.thumb_canvas = tk.Canvas(
+            top,
+            height=170,
+            bg="white"
+        )
+
+        self.hscroll = ttk.Scrollbar(
+            top,
+            orient="horizontal",
+            command=self._scroll_x
+        )
+
+        self.thumb_canvas.configure(
+            xscrollcommand=self.hscroll.set
+        )
+
+        self.thumb_canvas.pack(
+            fill="x",
+            side="top"
+        )
+
+        self.hscroll.pack(
+            fill="x",
+            side="bottom"
+        )
+
+        # -----------------------------
+        # Preview area
+        # -----------------------------
+
+        self.preview_frame = ttk.Frame(self.frame)
+        self.preview_frame.pack(fill="both", expand=True)
+
+        self.preview_canvas = tk.Canvas(
+            self.preview_frame,
+            bg="#f0f0f0",
+            highlightthickness=0
+        )
+
+        self.preview_canvas.pack(
+            fill="both",
+            expand=True
+        )
+
+        self.preview_name = ttk.Label(
+            self.preview_frame,
+            text="",
+            anchor="center"
+        )
+
+        self.preview_name.pack(
+            fill="x",
+            pady=(4, 6)
+        )
+
+        self.image_item = None
+
+        self.preview_canvas.bind(
+            "<Configure>",
+            self.on_preview_resize
+        )
+
+        self.thumb_canvas.bind(
+            "<Configure>",
+            lambda e: self.update_visible_thumbnails()
+        )
+
+    def delete_image(self, path):
+
+        if not messagebox.askyesno("Delete", f"Move\n\n{path.name}\n\nto the Recycle Bin?"):
+            return
+
+        try:
+            send2trash(str(path))
+            self.app.refresh_image_browser()
+            self.app.refresh_log()
+        except Exception as exc:
+            messagebox.showerror( "Delete failed", str(exc) )
+
+    def _scroll_x(self, *args):
+
+        self.thumb_canvas.xview(*args)
+
+        self.update_visible_thumbnails()
+
+    def load_images(self, image_paths):
+
+        self.image_paths = list(image_paths)
+
+        for idx in list(self.visible_items):
+            self.remove_thumbnail(idx)
+
+        width = max(
+            len(self.image_paths) * self.THUMB_W,
+            1
+        )
+
+        self.thumb_canvas.configure(
+            scrollregion=(0, 0, width, 170)
+        )
+
+        self.update_visible_thumbnails()
+
+        if self.image_paths:
+            self.select_image(
+                self.image_paths[-1]
+            )
+
+    def update_visible_thumbnails(self):
+
+        if not self.image_paths:
+            return
+
+        left = self.thumb_canvas.canvasx(0)
+
+        right = (
+            left +
+            self.thumb_canvas.winfo_width()
+        )
+
+        first = max(
+            0,
+            int(left / self.THUMB_W) - 3
+        )
+
+        last = min(
+            len(self.image_paths),
+            int(right / self.THUMB_W) + 4
+        )
+
+        required = set(range(first, last))
+
+        # remove old thumbnails
+
+        for idx in list(self.visible_items):
+
+            if idx not in required:
+                self.remove_thumbnail(idx)
+
+        # create or refresh visible thumbnails
+
+        for idx in required:
+            if idx not in self.visible_items:
+                self.create_thumbnail(idx)
+            else:
+                self.update_thumbnail_style(idx)
+
+    def remove_thumbnail(self, idx):
+
+        item = self.visible_items.pop(idx, None)
+
+        if not item:
+            return
+
+        self.thumb_canvas.delete(item["image"])
+        self.thumb_canvas.delete(item["text"])
+        self.thumb_canvas.delete(item["delete"])
+
+    def _get_thumbnail_text_style(self, idx):
+        if idx == self.selected_index:
+            return "#058b9c", ("TkDefaultFont", 12, "bold", "italic")
+        return "black", ("TkDefaultFont", 9)
+
+    def update_thumbnail_style(self, idx):
+        item = self.visible_items.get(idx)
+        if not item:
+            return
+
+        fill, font = self._get_thumbnail_text_style(idx)
+        self.thumb_canvas.itemconfigure(item["text"], fill=fill, font=font)
+
+    def create_thumbnail(self, idx):
+        path = self.image_paths[idx]
+
+        try:
+            img = Image.open(path)
+            img.thumbnail(
+                (
+                    self.THUMB_H,
+                    self.THUMB_H
+                )
+            )
+            photo = ImageTk.PhotoImage(img)
+            x = (
+                idx * self.THUMB_W +
+                self.THUMB_W // 2
+            )
+            image_id = self.thumb_canvas.create_image(
+                x,
+                60,
+                image=photo
+            )
+
+            fill, font = self._get_thumbnail_text_style(idx)
+            text_id = self.thumb_canvas.create_text(
+                x,
+                140,
+                text=path.name,
+                width=140,
+                fill=fill,
+                font=font
+            )
+
+            self.thumb_canvas.tag_bind(
+                image_id,
+                "<Button-1>",
+                lambda e, p=path:
+                self.select_image(p)
+            )
+
+            delete_id = self.thumb_canvas.create_text(
+                x,
+                158,
+                text="❌ Delete",
+                fill="red",
+                font=("Segoe UI Emoji", 10, "bold")
+            )
+
+            self.thumb_canvas.tag_bind(
+                delete_id,
+                "<Button-1>",
+                lambda e, p=path: self.delete_image(p)
+            )
+
+            self.visible_items[idx] = {
+                "image": image_id,
+                "text": text_id,
+                "delete": delete_id,
+                "photo": photo
+            }
+        except Exception as exc:
+            print(exc)
+
+    def on_preview_resize(self, event):
+        self.update_preview_image()
+
+    def update_preview_image(self):
+        if self.original_image is None:
+            return
+
+        w = self.preview_canvas.winfo_width()
+        h = self.preview_canvas.winfo_height()
+
+        if w < 10 or h < 10:
+            return
+
+        img = self.original_image.copy()
+        img.thumbnail(
+            (w - 10, h - 10),
+            Image.Resampling.LANCZOS
+        )
+        self.preview_photo = ImageTk.PhotoImage(img)
+        self.preview_canvas.delete("all")
+        self.image_item = self.preview_canvas.create_image(
+            w // 2,
+            h // 2,
+            image=self.preview_photo
+        )
+        self.preview_canvas.tag_bind(
+            self.image_item,
+            "<Button-1>",
+            self.open_external_viewer
+        )
+
+    def select_image(self, path):
+        self.selected_path = path
+
+        try:
+            self.original_image = Image.open(path)
+            self.preview_name.configure(
+                text=path.name
+            )
+            self.update_preview_image()
+
+        except Exception as exc:
+            self.preview_canvas.delete("all")
+
+            self.preview_canvas.create_text(
+                20,
+                20,
+                anchor="nw",
+                text=str(exc)
+            )
+            self.preview_name.configure(text="")
+        else:
+            try:
+                self.selected_index = self.image_paths.index(path)
+            except ValueError:
+                self.selected_index = None
+            self.update_visible_thumbnails()
+
+    def open_external_viewer(self, event=None):
+        if self.selected_path and self.selected_path.exists():
+            os.startfile(self.selected_path)
+
+
 class MyCaptareEcranApp:
     def __init__(self):
         self.root = None
         self.log_widget = None
         self.app_hwnd = None
+
+        self.pics_list = []
+
         self._hotkey_thread = None
         self._hotkey_thread_id = None
         self._hotkey_registered = False
@@ -373,15 +702,58 @@ class MyCaptareEcranApp:
 
         self.save_left_button = None
         self.save_right_button = None
+        self.browser_window = None
+        self._browser_window_geometry = None
 
         # setting variable ---------------------------
         self.settings = self.load_settings()
+        self._browser_window_geometry = self._normalize_browser_geometry(
+            self.settings.get("image_browser_geometry")
+        )
 
         self.step_no_index_delimiter_var = self.settings.get("step_no_index_delimiter", ".")
 
 
     def create_gui(self):
         self.root = tk.Tk()
+
+        self.browser_window = tk.Toplevel(self.root)
+        self.browser_window.withdraw()
+        self.browser_window.title("Images")
+        self.browser_window.protocol("WM_DELETE_WINDOW", self.hide_image_browser)
+        self.browser_window.rowconfigure(0, weight=1)
+        self.browser_window.columnconfigure(0, weight=1)
+        self.browser_window.bind("<Configure>", self._on_browser_window_configure)
+
+        self.main_paned = ttk.PanedWindow(
+            self.root,
+            orient=tk.HORIZONTAL
+        )
+
+        self.main_paned.pack(
+            fill="both",
+            expand=True
+        )
+
+        self.left_frame = ttk.Frame(
+            self.main_paned
+        )
+
+        self.right_frame = ttk.Frame(
+            self.browser_window,
+            width=500
+        )
+        self.right_frame.grid(
+            row=0,
+            column=0,
+            sticky="nsew"
+        )
+
+        self.main_paned.add(
+            self.left_frame,
+            weight=4
+        )
+
         self.root.title("Utilitar screenshoturi...")
         self.root.grid_columnconfigure(0, weight=1)
         self.root.grid_rowconfigure(5, weight=1)
@@ -400,7 +772,7 @@ class MyCaptareEcranApp:
         vcmd = (self.root.register(self.validate_step), "%P")
 
         PAD = 11
-        frame_window_name = ttk.Frame(self.root)
+        frame_window_name = ttk.Frame(self.left_frame)
         frame_window_name.pack(fill="x", padx=PAD, pady=(PAD, 4))
         ttk.Label(frame_window_name, text="window name:").pack(side="left")
 
@@ -416,7 +788,7 @@ class MyCaptareEcranApp:
 
 
         # Work directory
-        frame_work = ttk.Frame(self.root)
+        frame_work = ttk.Frame(self.left_frame)
         frame_work.pack(fill="x", padx=PAD, pady=(PAD, 4))
 
         ttk.Label(frame_work, text="work dir:").pack(side="left")
@@ -428,7 +800,7 @@ class MyCaptareEcranApp:
         ).pack(side="left", fill="x", expand=True, padx=(5, 0))
 
         # RC / SCI
-        frame_ids = ttk.Frame(self.root)
+        frame_ids = ttk.Frame(self.left_frame)
         frame_ids.pack(pady=4)
 
         ttk.Label(frame_ids, text="RC name:").grid(row=0, column=0, padx=5)
@@ -446,7 +818,7 @@ class MyCaptareEcranApp:
         ).grid(row=0, column=3, padx=5)
 
         # Step
-        frame_step = ttk.Frame(self.root)
+        frame_step = ttk.Frame(self.left_frame)
         frame_step.pack(pady=4)
 
         self.create_step_folder_var = tk.BooleanVar(value=self.settings.get("create_step_folder", True))
@@ -466,7 +838,7 @@ class MyCaptareEcranApp:
         ).grid(row=0, column=2)
 
         # - / +
-        frame_adjust = ttk.Frame(self.root)
+        frame_adjust = ttk.Frame(self.left_frame)
         frame_adjust.pack(fill="x", padx=PAD, pady=4)
 
         ttk.Button(
@@ -490,7 +862,7 @@ class MyCaptareEcranApp:
         ).pack(side="right")
 
         # Save buttons
-        frame_save = ttk.Frame(self.root)
+        frame_save = ttk.Frame(self.left_frame)
         frame_save.pack(fill="x", padx=PAD, pady=(4, PAD))
 
         frame_save.columnconfigure(0, weight=1)
@@ -524,13 +896,13 @@ class MyCaptareEcranApp:
         self.save_right_button.grid(row=0, column=2, padx=5)
 
         # Refresh button and Create Zip button
-        frame_refresh = ttk.Frame(self.root)
+        frame_refresh = ttk.Frame(self.left_frame)
         frame_refresh.pack(fill="x", padx=PAD, pady=(4, PAD))
 
         ttk.Button(
             frame_refresh,
             text="🔄 Refresh Log",
-            command=self.refresh_log
+            command=self.refresh_pics_list
         ).pack(side="left", fill="x", expand=False, padx=5)
 
         ttk.Button(
@@ -539,11 +911,17 @@ class MyCaptareEcranApp:
             command=self.create_sci_zip
         ).pack(side="left", fill="x", expand=False, padx=5)
 
+        ttk.Button(
+            frame_refresh,
+            text="🖼 Images",
+            command=self.toggle_visibility_image_browser
+        ).pack(side="right", padx=5)
+
         # ----------------------------------------------------
         # Screenshot log
         # ----------------------------------------------------
 
-        self.log_widget = LogWidget(self.root, self)
+        self.log_widget = LogWidget(self.left_frame, self)
 
         self.root.update_idletasks()
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
@@ -570,12 +948,179 @@ class MyCaptareEcranApp:
 
         self.root.bind("<Alt-z>", _on_shortcut_alt_z)
 
+        # self.browser = ImageBrowser(
+        #     self.right_frame
+        # )
+
+        self.browser = ImageBrowser(
+            self.right_frame,
+            self
+        )
+
+        self.browser.frame.pack(
+            fill="both",
+            expand=True
+        )
+        self.browser_visible = False
+
         self.root.update_idletasks()
+        if self._can_refresh_on_startup():
+            self.root.after(250, self.refresh_pics_list)
         # +++++++++++++++++++++++++++++++++++++++++++
         ico = Path(__file__).parent / "camera_gear_icon.ico"
         self.root.iconbitmap(ico)
         self.root.mainloop()
+
+        # self.refresh_log()
         # ============================end of gui creation
+
+    def _can_refresh_on_startup(self) -> bool:
+        try:
+            work_dir = Path(self.work_dir_var.get().strip())
+            rc = self.rc_var.get().strip()
+            sci = self.sci_var.get().strip()
+            return bool(work_dir and rc and sci)
+        except Exception:
+            return False
+
+    def _normalize_browser_geometry(self, value):
+        if isinstance(value, dict):
+            width = value.get("width")
+            height = value.get("height")
+            x = value.get("x")
+            y = value.get("y")
+            if width and height:
+                geometry = f"{int(width)}x{int(height)}"
+                if x is not None and y is not None:
+                    geometry += f"+{int(x)}+{int(y)}"
+                return geometry
+        return None
+
+    def _save_browser_window_geometry(self):
+        if not self.browser_window:
+            return
+
+        try:
+            self._browser_window_geometry = self.browser_window.geometry()
+            self.settings["image_browser_geometry"] = {
+                "width": self.browser_window.winfo_width(),
+                "height": self.browser_window.winfo_height(),
+                "x": self.browser_window.winfo_rootx(),
+                "y": self.browser_window.winfo_rooty(),
+            }
+            if self.root is not None and self.app_window_name_var is not None:
+                self.save_settings()
+        except Exception:
+            pass
+
+    def _on_browser_window_configure(self, event=None):
+        if not self.browser_window or not self.browser_window.winfo_ismapped():
+            return
+        self._save_browser_window_geometry()
+
+    def animate_sash(self, target=None):
+        if not self.browser_window:
+            return
+
+        self.root.update_idletasks()
+        self.browser_window.update_idletasks()
+
+        if self.browser_visible:
+            self._position_browser_window()
+            self.browser.update_preview_image()
+
+    def _position_browser_window(self):
+        if not self.browser_window or not self.root.winfo_ismapped():
+            return
+
+        self.root.update_idletasks()
+        self.browser_window.update_idletasks()
+
+        if self._browser_window_geometry:
+            self.browser_window.geometry(self._browser_window_geometry)
+            return
+
+        x = self.root.winfo_rootx() + self.root.winfo_width() + 8
+        y = self.root.winfo_rooty()
+        width = 520
+        height = min(800, self.root.winfo_screenheight() - 40)
+
+        if x + width > self.root.winfo_screenwidth():
+            x = max(10, self.root.winfo_screenwidth() - width - 10)
+
+        if y + height > self.root.winfo_screenheight():
+            y = max(10, self.root.winfo_screenheight() - height - 10)
+
+        self._browser_window_geometry = f"{width}x{height}+{x}+{y}"
+        self.browser_window.geometry(self._browser_window_geometry)
+
+    def hide_image_browser(self):
+        if self.browser_window:
+            self._save_browser_window_geometry()
+            self.browser_window.withdraw()
+        self.browser_visible = False
+
+    def toggle_visibility_image_browser(self):
+        if not self.browser_window:
+            self.browser_window = tk.Toplevel(self.root)
+            self.browser_window.withdraw()
+            self.browser_window.title("Images")
+            self.browser_window.transient(self.root)
+            self.browser_window.protocol("WM_DELETE_WINDOW", self.hide_image_browser)
+            self.browser_window.rowconfigure(0, weight=1)
+            self.browser_window.columnconfigure(0, weight=1)
+            self.right_frame = ttk.Frame(self.browser_window, width=500)
+            self.right_frame.grid(row=0, column=0, sticky="nsew")
+            self.browser = ImageBrowser(self.right_frame)
+            self.browser.frame.pack(fill="both", expand=True)
+
+        if self.browser_visible:
+            self.hide_image_browser()
+            return
+
+        self._position_browser_window()
+        self.browser_window.deiconify()
+        self.browser_window.lift()
+        self.browser_window.update_idletasks()
+        self.browser_visible = True
+        self.browser.update_preview_image()
+
+    def refresh_image_browser(self):
+
+        try:
+
+            work_dir = Path(
+                self.work_dir_var.get().strip()
+            )
+
+            rc = self.sanitize_name(
+                self.rc_var.get().strip()
+            )
+
+            sci = self.sanitize_name(
+                self.sci_var.get().strip()
+            )
+
+            sci_path = work_dir / rc / sci
+
+            if not sci_path.exists():
+
+                self.browser.load_images([])
+                return
+
+            png_files = []
+
+            for p in sci_path.rglob("*.png"):
+                png_files.append(p)
+
+            png_files.sort()
+
+            self.browser.load_images(
+                png_files
+            )
+
+        except Exception as exc:
+            print(exc)
 
     def load_settings(self):
         print(f"[DEBUG] Loading settings from {SETTINGS_FILE}")
@@ -601,7 +1146,8 @@ class MyCaptareEcranApp:
                 "auto_increment_step": False,
                 "create_step_folder": True,
                 "step_no_index_delimiter": ".",
-                "app_window_name_list": []}
+                "app_window_name_list": [],
+                "image_browser_geometry": None}
 
     def save_settings(self):
         print(f"[DEBUG] Saving settings to {SETTINGS_FILE}")
@@ -623,6 +1169,7 @@ class MyCaptareEcranApp:
                             "create_step_folder": self.create_step_folder_var.get(),
                             "step_no_index_delimiter": self.step_no_index_delimiter_var,
                             "app_window_name_list": window_name_list,
+                            "image_browser_geometry": self.settings.get("image_browser_geometry"),
                             },
                             f, indent=2)
         except Exception as exc:
@@ -784,9 +1331,10 @@ class MyCaptareEcranApp:
         self.log_widget.add_entry(message)
         self.log_widget._update_scroll_region()
 
-    def refresh_log(self):
-        """Refresh the log by reading all PNG files from SCI path"""
+    def refresh_pics_list(self):
+        """Refresh the picture list by reading all PNG files from SCI path"""
         self.log_widget.refresh_from_sci()
+        self.refresh_image_browser()
 
     def extract_sci_number(self, sci_name: str) -> str:
         """Extract the number from SCI name.
@@ -1053,6 +1601,7 @@ class MyCaptareEcranApp:
             self.save_right_button.config(state="normal")
 
         self.append_log(str(destination))
+        self.refresh_image_browser()
 
         if self.auto_increment_step_var.get():
             try:
@@ -1081,75 +1630,9 @@ class MyCaptareEcranApp:
 
 def main():
     """Main entry point"""
-    # parser = argparse.ArgumentParser(description="Utilitar screenshoturi")
-    # parser.add_argument("--capture-window", action="store_true", help="Capture active window and exit (headless)")
-    # args = parser.parse_args()
-
-    # if args.capture_window:
-    #     run_cli_capture_window()
-    #     return
-
     app = MyCaptareEcranApp()
     app.create_gui()
 
 
 if __name__ == "__main__":
     main()
-
-
-# def run_cli_capture_window():
-#     """Run a single capture of the active window using saved settings and exit.
-
-#     This creates a hidden Tk root so StringVar/BooleanVar work, avoids GUI
-#     popups and prints the saved destination path to stdout.
-#     """
-#     app = MyCaptareEcranApp()
-
-#     # Create a hidden root so tkinter variables work
-#     root = tk.Tk()
-#     root.withdraw()
-#     app.root = root
-
-#     # Setup variables from settings
-#     settings = app.settings
-#     app.work_dir_var = tk.StringVar(root, value=settings.get("work_dir", ""))
-#     app.rc_var = tk.StringVar(root, value=settings.get("rc", ""))
-#     app.sci_var = tk.StringVar(root, value=settings.get("sci", ""))
-#     app.step_var = tk.StringVar(root, value=settings.get("step", "1"))
-#     app.auto_increment_step_var = tk.BooleanVar(root, value=settings.get("auto_increment_step", False))
-#     app.app_window_name_var = tk.StringVar(root, value=settings.get("app_window_name", ""))
-
-#     # Minimal dummy buttons to satisfy calls to .config()
-#     class _DummyBtn:
-#         def config(self, **_):
-#             return
-
-#     app.save_left_button = _DummyBtn()
-#     app.save_right_button = _DummyBtn()
-
-#     # Replace append_log to print to stdout
-#     app.append_log = lambda msg: print(msg)
-
-#     # Find window
-#     window_name = app.app_window_name_var.get().strip()
-#     if not window_name:
-#         print("No window name configured in settings.")
-#         root.destroy()
-#         return
-
-#     hwnd = app.find_window(window_name)
-#     if not hwnd:
-#         print(f"Window not found: {window_name}")
-#         root.destroy()
-#         return
-
-#     # Activate (maximize) the window before capture
-#     try:
-#         app.activate_window(window_name)
-#     except Exception as e:
-#         print("Failed to activate window:", e)
-
-#     # Perform capture
-#     app.capture(None, only_window=True)
-
-#     root.destroy()
