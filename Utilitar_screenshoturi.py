@@ -19,7 +19,7 @@ pyinstaller --onefile --windowed --name "Utilitar_Screenshoturi" captare_ecran_t
 
 ***ultima folosita:
 comanda finala de creare a executabilului cu nuitka, cu iconita personalizata, versiune produs, nume produs, companie, si includerea icoanei in date files ca sa fie disponibila la runtime pentru setarea iconitei ferestrei (altfel icoana e doar pentru fisierul EXE dar fereastra are iconita default python):
-python -m nuitka --standalone --remove-output --include-data-files=camera_gear_icon.ico=camera_gear_icon.ico --enable-plugin=tk-inter --windows-disable-console --windows-icon-from-ico="C:\Liamis_testing\scripturi\utilitar_screenshoturi\camera_gear_icon.ico" --product-version="0.2" --product-name="Utilitar Screenshoturi" --output-filename="Utilitar_screenshoturi.exe" --company-name="AndreiP" Utilitar_screenshoturi.py
+python -m nuitka --standalone --remove-output --include-data-files="camera_gear2.ico=camera_gear2.ico" --enable-plugin=tk-inter --windows-disable-console --windows-icon-from-ico="C:\Liamis_testing\scripturi\utilitar_screenshoturi\camera_gear2.ico" --product-version="0.2" --product-name="Utilitar Screenshoturi" --output-filename="Utilitar_screenshoturi.exe" --company-name="AndreiP" Utilitar_screenshoturi.py
 
 
 Descriere scurtă a capabilităților
@@ -222,7 +222,7 @@ class LogWidget:
         btn_frame = tk.Frame(inner_frame, bg="white")
         btn_frame.pack(side="left", padx=(5, 8), pady=6)
 
-        def open_path():
+        def cmd_open_path():
             if path.exists():
                 import subprocess
                 try:
@@ -232,9 +232,9 @@ class LogWidget:
                     messagebox.showerror("Error", f"Failed to open: {e}")
             else:
                 messagebox.showwarning("Path not found", f"The path does not exist:\n{path_str}\n\nRefreshing log...")
-                self.refresh_from_sci()
+                self.refresh_picture_logs()
 
-        btn = tk.Button(btn_frame, text="📁", command=open_path,
+        btn = tk.Button(btn_frame, text="📁", command=cmd_open_path,
                        bg="#4CAF50", fg="white", font=("Times", 9, "bold"),
                        padx=10, pady=4, relief="flat", cursor="hand2",
                        activebackground="#45a049", activeforeground="white")
@@ -286,69 +286,24 @@ class LogWidget:
         # Scroll to bottom using a more forceful method
         self.canvas.yview_scroll(999999, "units")
 
-    def refresh_from_sci(self):
+    def refresh_picture_logs(self):
         """Refresh log by reading all PNG files from the SCI path"""
         self.clear()
         try:
-            work_dir = Path(self.app.work_dir_var.get().strip())
-            raw_rc = self.app.rc_var.get().strip()
-            raw_sci = self.app.sci_var.get().strip()
-
-            if not raw_rc or not raw_sci:
-                messagebox.showwarning("Configuration", "RC and SCI names are required.")
-                return
-
-            # Sanitize the names using the app's method
-            rc = self.app.sanitize_name(raw_rc)
-            sci = self.app.sanitize_name(raw_sci)
-
-            # Build the SCI path
-            sci_path = work_dir / rc / sci
-
-            if not sci_path.exists():
-                messagebox.showinfo("Info", f"Path does not exist yet:\n{sci_path}")
-                return
-
-            # Recursively find all PNG files
-            png_files = list(sci_path.glob("**/*.png"))
-
-            # Custom sorting: by step number first, then by photo index
-            def sort_key(file_path):
-                """Extract step number and photo index for sorting from filename, with folder name fallback"""
-                try:
-                    # Get the filename without extension
-                    file_stem = file_path.stem
-
-                    # Try to extract step number and index from filename
-                    # Pattern: step<number> or step<number>.<index>
-                    # Examples: step1, step1.1, step1.2, step2.3
-                    match = re.search(r'step(\d+)(?:\.(\d+))?', file_stem)
-
-                    if match:
-                        step_num = int(match.group(1))
-                        photo_index = int(match.group(2)) if match.group(2) else 0
-                        return (step_num, photo_index)
-
-                    # Fallback: try to extract step number from parent folder name
-                    parent_name = file_path.parent.name
-                    step_match = re.search(r'[Ss]tep(\d+)', parent_name)
-                    if step_match:
-                        step_num = int(step_match.group(1))
-                        return (step_num, 0)
-
-                    return (0, 0)
-                except Exception:
-                    return (0, 0)
-
-            png_files = sorted(png_files, key=sort_key)
-
-            if png_files:
-                for png_file in png_files:
+            if self.app.pics_list:
+                for png_file in self.app.pics_list:
                     self.add_entry(str(png_file))
                 # Update scroll region after all entries are added
                 self._update_scroll_region()
-                messagebox.showinfo("Refresh complete", f"Found {len(png_files)} PNG file(s).")
+                messagebox.showinfo("Refresh complete", f"Found {len(self.app.pics_list)} PNG file(s).")
             else:
+                work_dir = Path(self.app.work_dir_var.get().strip())
+                rc = self.sanitize_name(self.app.rc_var.get().strip())
+                sci = self.sanitize_name(self.app.sci_var.get().strip())
+
+                # Build the SCI path
+                sci_path = work_dir / rc / sci
+
                 self.add_entry(f"No PNG files found in {sci_path}")
                 self._update_scroll_region()
         except Exception as e:
@@ -457,81 +412,76 @@ class ImageBrowser:
 
         try:
             send2trash(str(path))
-            self.app.refresh_image_browser()
-            self.app.refresh_log()
+            self.app.cmd_refresh_pics_list()
         except Exception as exc:
             messagebox.showerror( "Delete failed", str(exc) )
 
     def _scroll_x(self, *args):
-
         self.thumb_canvas.xview(*args)
-
         self.update_visible_thumbnails()
 
     def load_images(self, image_paths):
-
         self.image_paths = list(image_paths)
-
         for idx in list(self.visible_items):
             self.remove_thumbnail(idx)
 
-        width = max(
-            len(self.image_paths) * self.THUMB_W,
-            1
-        )
+        width = max(len(self.image_paths) * self.THUMB_W,
+                    1
+                    )
 
-        self.thumb_canvas.configure(
-            scrollregion=(0, 0, width, 170)
-        )
+        self.thumb_canvas.configure(scrollregion=(0, 0, width, 170))
 
         self.update_visible_thumbnails()
 
         if self.image_paths:
-            self.select_image(
-                self.image_paths[-1]
-            )
+            self.select_image(self.image_paths[-1])
 
     def update_visible_thumbnails(self):
 
         if not self.image_paths:
             return
-
         left = self.thumb_canvas.canvasx(0)
+        right = (left + self.thumb_canvas.winfo_width())
 
-        right = (
-            left +
-            self.thumb_canvas.winfo_width()
-        )
+        first = max(0,
+                    int(left / self.THUMB_W) - 3
+                    )
 
-        first = max(
-            0,
-            int(left / self.THUMB_W) - 3
-        )
-
-        last = min(
-            len(self.image_paths),
-            int(right / self.THUMB_W) + 4
-        )
+        last = min(len(self.image_paths),
+                   int(right / self.THUMB_W) + 4
+                   )
 
         required = set(range(first, last))
 
         # remove old thumbnails
-
         for idx in list(self.visible_items):
 
             if idx not in required:
                 self.remove_thumbnail(idx)
 
         # create or refresh visible thumbnails
-
         for idx in required:
             if idx not in self.visible_items:
                 self.create_thumbnail(idx)
             else:
                 self.update_thumbnail_style(idx)
 
-    def remove_thumbnail(self, idx):
+    def scroll_to_selected_thumbnail(self):
+        if self.selected_index is None or not self.image_paths:
+            return
 
+        self.thumb_canvas.update_idletasks()
+        canvas_width = max(1, self.thumb_canvas.winfo_width())
+        scroll_width = max(canvas_width, len(self.image_paths) * self.THUMB_W)
+        target_x = (self.selected_index * self.THUMB_W + self.THUMB_W // 2) - (canvas_width / 2)
+        max_offset = max(1, scroll_width - canvas_width)
+        target = max(0.0, min(1.0, target_x / max_offset))
+        self.thumb_canvas.xview_moveto(target)
+        self.thumb_canvas.update_idletasks()
+        self.update_visible_thumbnails()
+        self.thumb_canvas.after_idle(self.update_visible_thumbnails)
+
+    def remove_thumbnail(self, idx):
         item = self.visible_items.pop(idx, None)
 
         if not item:
@@ -657,6 +607,13 @@ class ImageBrowser:
             )
             self.update_preview_image()
 
+        except FileNotFoundError as exc:
+            self.app.auto_dissapearing_warning("Screenshot not found",
+                                               f"Missing file:\n{path}\n\nRefreshing log..."
+                                               )
+            # messagebox.showwarning("Screenshot not found",
+            #                        "Missing file: " + str(path) + "\n\nRefreshing log...")
+            self.app.cmd_refresh_pics_list()
         except Exception as exc:
             self.preview_canvas.delete("all")
 
@@ -673,10 +630,19 @@ class ImageBrowser:
             except ValueError:
                 self.selected_index = None
             self.update_visible_thumbnails()
+            self.scroll_to_selected_thumbnail()
 
     def open_external_viewer(self, event=None):
         if self.selected_path and self.selected_path.exists():
             os.startfile(self.selected_path)
+            return
+
+        self.app.auto_dissapearing_warning("File not found",
+                                           f"The image file no longer exists:\n{self.selected_path}",
+                                           timeout=4000
+                                           )
+        self.app.cmd_refresh_pics_list()
+
 
 
 class MyCaptareEcranApp:
@@ -713,6 +679,27 @@ class MyCaptareEcranApp:
 
         self.step_no_index_delimiter_var = self.settings.get("step_no_index_delimiter", ".")
 
+    def auto_dissapearing_warning(self, title, message, timeout=5000):
+        win = tk.Toplevel(self.root)
+        win.title(title)
+        win.transient(self.root)
+        win.resizable(False, False)
+        win.attributes("-topmost", True)
+
+        ttk.Label(
+            win,
+            text=message,
+            padding=15,
+            justify="center"
+        ).pack()
+
+        # Center over parent
+        win.update_idletasks()
+        x = self.root.winfo_rootx() + (self.root.winfo_width() - win.winfo_width()) // 2
+        y = self.root.winfo_rooty() + (self.root.winfo_height() - win.winfo_height()) // 2
+        win.geometry(f"+{x}+{y}")
+
+        win.after(timeout, win.destroy)
 
     def create_gui(self):
         self.root = tk.Tk()
@@ -845,7 +832,7 @@ class MyCaptareEcranApp:
             frame_adjust,
             text="step-1",
             width=7,
-            command=self.decrement_step
+            command=self.cmd_decrement_step
         ).pack(side="left")
 
         self.auto_increment_step_var = tk.BooleanVar(value=self.settings.get("auto_increment_step", True))
@@ -858,7 +845,7 @@ class MyCaptareEcranApp:
             frame_adjust,
             text="step+1",
             width=7,
-            command=self.increment_step
+            command=self.cmd_increment_step
         ).pack(side="right")
 
         # Save buttons
@@ -873,14 +860,14 @@ class MyCaptareEcranApp:
             frame_save,
             text="capture LEFT screen",
             width=20,
-            command=self.save_left_screen
+            command=self.cmd_save_left_screen
         )
 
         self.save_window_button = ttk.Button(
             frame_save,
             text="capture WINDOW",
             width=20,
-            command=self.save_window
+            command=self.cmd_save_window
         )
         # Add tooltip to capture window button
         Tooltip(self.save_window_button, "Capture active window\nKeyboard: Win+Alt+Z")
@@ -889,7 +876,7 @@ class MyCaptareEcranApp:
             frame_save,
             text="capture RIGHT screen",
             width=20,
-            command=self.save_right_screen
+            command=self.cmd_save_right_screen
         )
         self.save_left_button.grid(row=0, column=0, padx=5)
         self.save_window_button.grid(row=0, column=1, padx=5)
@@ -902,19 +889,19 @@ class MyCaptareEcranApp:
         ttk.Button(
             frame_refresh,
             text="🔄 Refresh Log",
-            command=self.refresh_pics_list
+            command=self.cmd_refresh_pics_list
         ).pack(side="left", fill="x", expand=False, padx=5)
 
         ttk.Button(
             frame_refresh,
             text="📦 Create ZIP",
-            command=self.create_sci_zip
+            command=self.cmd_create_sci_zip
         ).pack(side="left", fill="x", expand=False, padx=5)
 
         ttk.Button(
             frame_refresh,
             text="🖼 Images",
-            command=self.toggle_visibility_image_browser
+            command=self.cmd_toggle_visibility_image_browser
         ).pack(side="right", padx=5)
 
         # ----------------------------------------------------
@@ -948,10 +935,6 @@ class MyCaptareEcranApp:
 
         self.root.bind("<Alt-z>", _on_shortcut_alt_z)
 
-        # self.browser = ImageBrowser(
-        #     self.right_frame
-        # )
-
         self.browser = ImageBrowser(
             self.right_frame,
             self
@@ -965,13 +948,12 @@ class MyCaptareEcranApp:
 
         self.root.update_idletasks()
         if self._can_refresh_on_startup():
-            self.root.after(250, self.refresh_pics_list)
+            self.root.after(250, self.cmd_refresh_pics_list)
         # +++++++++++++++++++++++++++++++++++++++++++
-        ico = Path(__file__).parent / "camera_gear_icon.ico"
+        ico = Path(__file__).parent / "camera_gear2.ico"
         self.root.iconbitmap(ico)
         self.root.mainloop()
 
-        # self.refresh_log()
         # ============================end of gui creation
 
     def _can_refresh_on_startup(self) -> bool:
@@ -1060,7 +1042,7 @@ class MyCaptareEcranApp:
             self.browser_window.withdraw()
         self.browser_visible = False
 
-    def toggle_visibility_image_browser(self):
+    def cmd_toggle_visibility_image_browser(self):
         if not self.browser_window:
             self.browser_window = tk.Toplevel(self.root)
             self.browser_window.withdraw()
@@ -1086,41 +1068,8 @@ class MyCaptareEcranApp:
         self.browser.update_preview_image()
 
     def refresh_image_browser(self):
+        self.browser.load_images(self.pics_list)
 
-        try:
-
-            work_dir = Path(
-                self.work_dir_var.get().strip()
-            )
-
-            rc = self.sanitize_name(
-                self.rc_var.get().strip()
-            )
-
-            sci = self.sanitize_name(
-                self.sci_var.get().strip()
-            )
-
-            sci_path = work_dir / rc / sci
-
-            if not sci_path.exists():
-
-                self.browser.load_images([])
-                return
-
-            png_files = []
-
-            for p in sci_path.rglob("*.png"):
-                png_files.append(p)
-
-            png_files.sort()
-
-            self.browser.load_images(
-                png_files
-            )
-
-        except Exception as exc:
-            print(exc)
 
     def load_settings(self):
         print(f"[DEBUG] Loading settings from {SETTINGS_FILE}")
@@ -1331,9 +1280,62 @@ class MyCaptareEcranApp:
         self.log_widget.add_entry(message)
         self.log_widget._update_scroll_region()
 
-    def refresh_pics_list(self):
+    def _build_pics_list(self):
+        work_dir = Path(self.work_dir_var.get().strip())
+        raw_rc = self.rc_var.get().strip()
+        raw_sci = self.sci_var.get().strip()
+
+        if not raw_rc or not raw_sci:
+            messagebox.showwarning("Configuration", "RC and SCI names are required.")
+            return
+
+        # Sanitize the names using the app's method
+        rc = self.sanitize_name(raw_rc)
+        sci = self.sanitize_name(raw_sci)
+
+        # Build the SCI path
+        sci_path = work_dir / rc / sci
+
+        if not sci_path.exists():
+            messagebox.showinfo("Info", f"Path does not exist yet:\n{sci_path}")
+            return
+
+        # Recursively find all PNG files
+        png_files = list(sci_path.glob("**/*.png"))
+
+        # Custom sorting: by step number first, then by photo index
+        def sort_key(file_path):
+            """Extract step number and photo index for sorting from filename, with folder name fallback"""
+            try:
+                # Get the filename without extension
+                file_stem = file_path.stem
+
+                # Try to extract step number and index from filename
+                # Pattern: step<number> or step<number>.<index>
+                # Examples: step1, step1.1, step1.2, step2.3
+                match = re.search(r'step(\d+)(?:\.(\d+))?', file_stem)
+
+                if match:
+                    step_num = int(match.group(1))
+                    photo_index = int(match.group(2)) if match.group(2) else 0
+                    return (step_num, photo_index)
+
+                # Fallback: try to extract step number from parent folder name
+                parent_name = file_path.parent.name
+                step_match = re.search(r'[Ss]tep(\d+)', parent_name)
+                if step_match:
+                    step_num = int(step_match.group(1))
+                    return (step_num, 0)
+
+                return (0, 0)
+            except Exception:
+                return (0, 0)
+        self.pics_list = sorted(png_files, key=sort_key)
+
+    def cmd_refresh_pics_list(self):
         """Refresh the picture list by reading all PNG files from SCI path"""
-        self.log_widget.refresh_from_sci()
+        self._build_pics_list()
+        self.log_widget.refresh_picture_logs()
         self.refresh_image_browser()
 
     def extract_sci_number(self, sci_name: str) -> str:
@@ -1350,7 +1352,7 @@ class MyCaptareEcranApp:
             return match.group()
         return "0000"
 
-    def create_sci_zip(self):
+    def cmd_create_sci_zip(self):
         """Create a zip file from SCI folder contents.
 
         Zip file pattern: SCI-xxxx-{RC_name}.zip
@@ -1435,7 +1437,7 @@ class MyCaptareEcranApp:
             return int(value) >= 1
         return False
 
-    def increment_step(self):
+    def cmd_increment_step(self):
         """Increment step counter"""
         try:
             current = int(self.step_var.get())
@@ -1444,7 +1446,7 @@ class MyCaptareEcranApp:
 
         self.step_var.set(str(current + 1))
 
-    def decrement_step(self):
+    def cmd_decrement_step(self):
         """Decrement step counter"""
         try:
             current = int(self.step_var.get())
@@ -1533,7 +1535,7 @@ class MyCaptareEcranApp:
 
         return destination
 
-    def capture(self, monitor, only_window=True):
+    def cmd_capture(self, monitor, only_window=True):
         """Capture screenshot from monitor or window"""
         try:
             destination = self.build_output_path()
@@ -1600,6 +1602,7 @@ class MyCaptareEcranApp:
             self.save_left_button.config(state="normal")
             self.save_right_button.config(state="normal")
 
+        self.pics_list.append(destination)
         self.append_log(str(destination))
         self.refresh_image_browser()
 
@@ -1612,17 +1615,17 @@ class MyCaptareEcranApp:
 
         self.save_settings()
 
-    def save_left_screen(self):
+    def cmd_save_left_screen(self):
         """Capture left screen"""
-        self.capture(self.get_left_monitor(), only_window=False)
+        self.cmd_capture(self.get_left_monitor(), only_window=False)
 
-    def save_right_screen(self):
+    def cmd_save_right_screen(self):
         """Capture right screen"""
-        self.capture(self.get_right_monitor(), only_window=False)
+        self.cmd_capture(self.get_right_monitor(), only_window=False)
 
-    def save_window(self):
+    def cmd_save_window(self):
         """Capture active window"""
-        self.capture(None, only_window=True)
+        self.cmd_capture(None, only_window=True)
 
 # ============================================================
 # GUI Initialization
