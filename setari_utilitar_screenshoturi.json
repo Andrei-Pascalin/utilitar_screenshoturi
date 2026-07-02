@@ -1,14 +1,19 @@
 {
-  "work_dir": "C:\\Liamis_testing",
+  "work_dir": "C:\\_testing",
   "rc": "RC01",
-  "sci": "SCI-4229-User Account Capability \u2013 Technician Test Case Execution",
-  "step": "27",
+  "sci": "test1.2",
+  "step": "7",
   "auto_increment_step": false,
   "create_step_folder": true,
   "step_no_index_delimiter": ".",
   "app_window_name_list": [
-    "SMARTCataract",
-    "Andrei_VM",
-    "Andrei_VM_RC01"
-  ]
+    "Andrei_VM_RC01",
+    "Windows PowerShell"
+  ],
+  "image_browser_geometry": {
+    "width": 968,
+    "height": 800,
+    "x": 634,
+    "y": 88
+  }
 }
