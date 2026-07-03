@@ -298,8 +298,8 @@ class LogWidget:
                 messagebox.showinfo("Refresh complete", f"Found {len(self.app.pics_list)} PNG file(s).")
             else:
                 work_dir = Path(self.app.work_dir_var.get().strip())
-                rc = self.sanitize_name(self.app.rc_var.get().strip())
-                sci = self.sanitize_name(self.app.sci_var.get().strip())
+                rc = self.app.sanitize_name(self.app.rc_var.get().strip())
+                sci = self.app.sanitize_name(self.app.sci_var.get().strip())
 
                 # Build the SCI path
                 sci_path = work_dir / rc / sci
