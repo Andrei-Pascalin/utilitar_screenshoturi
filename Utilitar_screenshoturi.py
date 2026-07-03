@@ -45,6 +45,7 @@ import time
 import argparse
 import tkinter as tk
 import json
+import traceback
 import mss
 import os
 import zipfile
@@ -916,8 +917,8 @@ class MyCaptareEcranApp:
         try:
             self.register_system_hotkey()
         except Exception:
-            # Non-fatal: if registration fails, continue without global hotkey
-            pass
+            messagebox.showerror("Error", f'Failed to register system hotkey. Hotkey functionality will be disabled.\n\n{traceback.format_exc()}')
+
         # Keyboard shortcuts: Win+Alt+Z for capture window
         # Tk bindings don't accept a direct 'Win' modifier. Bind Alt+z and
         # verify the Windows key is held using GetAsyncKeyState.
@@ -931,7 +932,7 @@ class MyCaptareEcranApp:
                 win_left = win_right = 0
 
             if win_left or win_right:
-                self.save_window()
+                self.cmd_save_window()
 
         self.root.bind("<Alt-z>", _on_shortcut_alt_z)
 
@@ -1180,7 +1181,7 @@ class MyCaptareEcranApp:
                     print(f"[DEBUG hotkey] WM_HOTKEY received (wParam={msg.wParam})")
                     try:
                         print("[DEBUG hotkey] Scheduling save_window on GUI thread")
-                        self.root.after(0, self.save_window)
+                        self.root.after(0, self.cmd_save_window)
                     except Exception as e:
                         print("[DEBUG hotkey] Failed to schedule save_window:", e)
 
