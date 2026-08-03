@@ -71,10 +71,10 @@ class CaptureService:
             raise e
 
     def capture_window(self, img_path):
-        app_hwnd = self._activate_window(self.settings_service.settings.selected_window_name)
-        if not app_hwnd:
-            # self._reset_window_state()
-            return (None, None)
+        try:
+            app_hwnd = self._activate_window(self.settings_service.settings.selected_window_name)
+        except RuntimeError as e:
+            raise e
 
         time.sleep(0.2)
 
@@ -94,7 +94,7 @@ class CaptureService:
         }
         try:
             self._capture(region, img_path)
-        except Exception as e:
+        except RuntimeError as e:
             raise e
 
     # ------------------------------------------------------------------
@@ -136,10 +136,12 @@ class CaptureService:
         """Activate the target window"""
         all_windows = []
         def callback(hwnd, _):
+            # pylint: disable=c-extension-no-member
             if win32gui.IsWindowVisible(hwnd):
                 title = win32gui.GetWindowText(hwnd)
                 if title:
                     all_windows.append(title)
+        # pylint: disable=c-extension-no-member
         win32gui.EnumWindows(callback, None)
         # logger.debug(f"[DEBUG] Found windows: {all_windows}")
 
@@ -147,9 +149,7 @@ class CaptureService:
         hwnd = self._find_window(window_title)
 
         if hwnd == 0:
-            logger.warning(f'Window not found: "{window_title}"')
-            # messagebox.showerror("Error", f'Nu am găsit fereastra "{window_title}"')
-            return None
+            raise RuntimeError(f'Window not found: "{window_title}"')
 
         placement = win32gui.GetWindowPlacement(hwnd)
         show_cmd = placement[1]
