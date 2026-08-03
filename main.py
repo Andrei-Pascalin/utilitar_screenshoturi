@@ -20,25 +20,13 @@ pyinstaller --onefile --windowed --name "Utilitar_Screenshoturi" captare_ecran_t
 ***ultima folosita:
 comanda finala de creare a executabilului cu nuitka, cu iconita personalizata, versiune produs, nume produs, companie, si includerea icoanei in date files ca sa fie disponibila la runtime pentru setarea iconitei ferestrei (altfel icoana e doar pentru fisierul EXE dar fereastra are iconita default python):
 
-python -m nuitka `
-    --standalone `
-    --remove-output `
     --include-data-files="resources\icons\camera_gear2.ico=camera_gear2.ico" `
-    --enable-plugin=tk-inter `
-    --windows-disable-console `
-    --windows-icon-from-ico="C:\Liamis_testing\scripturi\utilitar_screenshoturi\resources\icons\camera_gear2.ico" `
-    --product-version="0.4" `
-    --product-name="Utilitar Screenshoturi" `
-    --output-filename="Utilitar_screenshoturi.exe" `
-    --company-name="AndreiP" `
-    main.py
 
 python -m nuitka `
     --standalone `
     --remove-output `
     --windows-disable-console `
     --include-data-dir=resources=resources `
-    --include-data-files="resources\icons\camera_gear2.ico=camera_gear2.ico" `
     --enable-plugin=tk-inter `
     --windows-icon-from-ico="C:\Liamis_testing\scripturi\utilitar_screenshoturi\resources\icons\camera_gear2.ico" `
     --product-version="0.4" `

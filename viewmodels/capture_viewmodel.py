@@ -98,7 +98,7 @@ class CaptureViewModel(Observable):
             logger.error(f"Failed to build output path: {e}")
             self.notification_service.error("Capture", f"Failed to build output path: {e}")
             return
-        except Exception as e:
+        except RuntimeError as e:
             logger.error(f"Unexpected error while building output path: {e}")
             self.notification_service.error("Capture", f"Unexpected error while building output path: {e}")
             return
@@ -111,7 +111,7 @@ class CaptureViewModel(Observable):
                 self.capture_service.capture_window(img_path)
             else:
                 self.capture_service.capture_monitor(source, img_path)
-        except Exception as e:
+        except RuntimeError as e:
             logger.exception(f"Capture failed: {e}")
             self.notification_service.error("Capture", f"Capture failed: {e}")
             return
