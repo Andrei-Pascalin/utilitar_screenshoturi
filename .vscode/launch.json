@@ -1,0 +1,17 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Python: Debug_cu_Venv",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/main.py",
+      "python": "C:\\Users\\Liamis\\test_PyVenv\\Scripts\\python.exe",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/C:\\Users\\Liamis\\test_PyVenv\\Scripts\\python.exe"
+      }
+    }
+  ]
+}

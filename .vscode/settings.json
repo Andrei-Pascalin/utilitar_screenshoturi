@@ -1,0 +1,16 @@
+{
+    "python.defaultInterpreterPath": "C:\\Users\\Liamis\\test_PyVenv\\Scripts\\python.exe",
+    "trailingSpaces.trimOnSave": true,
+	"python-envs.pythonProjects": [
+        {
+            "path": "main.py",
+            "envManager": "ms-python.python:venv",
+            "packageManager": "ms-python.python:pip"
+        },
+        {
+            "path": "models",
+            "envManager": "ms-python.python:venv",
+            "packageManager": "ms-python.python:pip"
+        }
+    ]
+}
