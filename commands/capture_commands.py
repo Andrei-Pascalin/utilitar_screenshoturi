@@ -6,7 +6,7 @@ class IncrementStepCommand(ICommand):
         super().__init__()
         self.capture_vm = capture_vm
 
-    def execute(self):
+    def execute(self, *args, **kwargs):
         self.capture_vm.increment_step()
 
 class DecrementStepCommand(ICommand):
@@ -14,7 +14,7 @@ class DecrementStepCommand(ICommand):
         super().__init__()
         self.capture_vm = capture_vm
 
-    def execute(self):
+    def execute(self, *args, **kwargs):
         self.capture_vm.decrement_step()
 
 class CaptureWindowCommand(ICommand):
@@ -22,7 +22,7 @@ class CaptureWindowCommand(ICommand):
         super().__init__()
         self.capture_vm = capture_vm
 
-    def execute(self, source):
+    def execute(self, source, *args, **kwargs):
         self.capture_vm.capture_img(source)
 
 class ReloadPicsCommand(ICommand):
@@ -30,6 +30,6 @@ class ReloadPicsCommand(ICommand):
         super().__init__()
         self.capture_vm = capture_vm
 
-    def execute(self):
+    def execute(self, *args, **kwargs):
         self.capture_vm.reload_pics()
 

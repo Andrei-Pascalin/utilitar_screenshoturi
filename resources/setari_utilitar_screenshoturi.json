@@ -2,16 +2,17 @@
   "work_dir": "C:\\Liamis_testing2",
   "rc": "RC0101",
   "sci": "sci_1",
-  "step": 4,
+  "step": 10,
   "auto_increment_step": false,
   "create_step_folder": true,
   "step_no_index_delimiter": ".",
   "app_window_name_list": [
-    "SMARTCataract",
     "Andrei_VM_RC01",
+    "SMARTCataract",
     "Windows PowerShell",
     "scdx_CLIENT"
   ],
-  "image_browser_geometry": "1016x664+1387+296",
-  "main_window_geometry": "1016x664+155+248"
+  "selected_window_name": "Andrei_VM_RC01",
+  "image_browser_geometry": "680x664+893+142",
+  "main_window_geometry": "542x664+64+128"
 }

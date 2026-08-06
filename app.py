@@ -8,6 +8,10 @@ from services.image_repository import ImageRepository
 from services.zip_service import ZipService
 from services.hotkey_service import HotkeyService
 from viewmodels.capture_viewmodel import CaptureViewModel
+from viewmodels.image_list_viewmodel import ImageListViewModel
+from viewmodels.settings_viewmodel import SettingsViewModel
+from viewmodels.browser_viewmodel import BrowserViewModel
+from viewmodels.log_viewmodel import LogViewModel
 
 logger = get_logger(__name__)
 
@@ -28,21 +32,33 @@ class MyApp:
             notification_service=self._notification_service
         )
         self.image_repository = ImageRepository(self.settings_service, self._notification_service)
-        self.zip_service = ZipService(self.settings_service,  self._notification_service)
+        self.zip_service = ZipService(self.settings_service, self._notification_service)
         self.hotkey_service = HotkeyService()
+
+        self.settings_viewmodel = SettingsViewModel(self.settings_service)
 
         # ViewModel
         self.capture_viewmodel = CaptureViewModel(
-            settings_service=self.settings_service,
+            settings_viewmodel=self.settings_viewmodel,
             capture_service=self.capture_service,
             image_repository=self.image_repository,
-            zip_service=self.zip_service,
             path_service=self.screenshot_path_service,
+            zip_service=self.zip_service,
             hotkey_service=self.hotkey_service,
             notification_service=self._notification_service
         )
 
-        self.main_window = MainWindow(self.capture_viewmodel, self._notification_service)
+        self.image_list_viewmodel = ImageListViewModel(self.image_repository, self.capture_viewmodel)
+        self.browser_viewmodel = BrowserViewModel(self.image_list_viewmodel, self.settings_viewmodel)
+        self.log_viewmodel = LogViewModel(self.image_list_viewmodel)
+
+        self.main_window = MainWindow(
+            self.capture_viewmodel,
+            self.settings_viewmodel,
+            self.browser_viewmodel,
+            self.log_viewmodel,
+            self._notification_service
+        )
 
     def run(self):
         logger.info("Application is running...")

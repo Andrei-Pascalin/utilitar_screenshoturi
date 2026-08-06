@@ -33,7 +33,7 @@ def validate_step(value):
     """Validate step number input"""
     if isinstance(value, str):
         if not value.isdigit():
-            return 0
+            return 1
         value = int(value)
 
     if value < 1:

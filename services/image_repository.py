@@ -39,7 +39,8 @@ class ImageRepository:
 
     def refresh_first_image_index(self, new_img_path:Path):
         old_key = f"step{self._settings_service.get_setting(SETTINGS_E.step)}.png"
-        new_key = f"step{self._settings_service.get_setting(SETTINGS_E.step)}{SETTINGS_E.step_no_index_delimiter}1.png"
+        delimiter = self._settings_service.get_setting(SETTINGS_E.step_no_index_delimiter)
+        new_key = f"step{self._settings_service.get_setting(SETTINGS_E.step)}{delimiter}1.png"
         new_value = ImageEntry(file_name=new_key, file_path=new_img_path)
 
         new_dict = {}

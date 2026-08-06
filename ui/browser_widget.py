@@ -5,23 +5,22 @@ from typing import TYPE_CHECKING
 
 import os
 import tkinter as tk
+from tkinter import messagebox
 
 from tkinter import ttk
 from PIL import Image, ImageTk
 
-from core.enums import ApplicationSettingsEnum, ObserverEvents
+from core.enums import ObserverEvents
 from core.logger import get_logger
 from core.observer import IObserver
-from utils.validation import get_img_entry_index_by_path
 
-# ca sa evit circular import cand vreau sa specific tipul unui obiect sau returnul unei fncții
+# ca sa evit circular import cand vreau sa specific tipul unui obiect sau returnul unei fncți
 if TYPE_CHECKING:
-    from ui.main_window import MainWindow
-    from models.image_entry import ImageEntry
+    from viewmodels.browser_viewmodel import BrowserViewModel
+    from viewmodels.browser_viewmodel import BrowserItem
 
 logger = get_logger(__name__)
 
-# TODO aista are nevoie de ceva review mai serios, fac cam multă vrăjeala pe ici pe colo
 class BrowserWidget(IObserver):
     """
     Displays captured images and allows basic navigation.
@@ -30,23 +29,29 @@ class BrowserWidget(IObserver):
     THUMB_W = 150
     THUMB_H = 120
 
-    def __init__(self, app:MainWindow):
-        self._app = app
+    def __init__(self, root: tk.Tk, viewmodel: BrowserViewModel):
+        self.root = root
+        self.viewmodel = viewmodel
+        self.viewmodel.add_observer(self)
 
         self._browser_visible = False
+        self._thumb_canvas = None
+        self._hscroll = None
+        self._preview_frame = None
+        self._preview_canvas = None
 
-        self.__browser_window = tk.Toplevel(self._app.root)
+        self.__browser_window = tk.Toplevel(self.root)
         self.__browser_window.withdraw()
         self.__browser_window.title("Images")
-        self.__browser_window.transient(self._app.root)
+        self.__browser_window.transient(self.root)
         self.__browser_window.protocol("WM_DELETE_WINDOW", self._hide_image_browser)
         self.__browser_window.rowconfigure(0, weight=1)
         self.__browser_window.columnconfigure(0, weight=1)
         self.__browser_window.bind("<Configure>", self._on_browser_window_configure)
 
-        self._browser_window_geometry = self._app.viewmodel.settings_service.get_setting(ApplicationSettingsEnum.image_browser_geometry)
+        self._browser_window_geometry = self.viewmodel.browser_geometry
 
-        self._image_paths:list[ImageEntry] = self._app.viewmodel.get_image_list()
+        self._image_paths:list[BrowserItem] = self.viewmodel.get_items()
 
         self._visible_items = {}
         self._selected_path = None
@@ -62,8 +67,9 @@ class BrowserWidget(IObserver):
 
 
     def create_gui(self):
-        # self.parent = parent
-        self.__browser_window.geometry(self._browser_window_geometry)
+        # self._browser_window_geometry may be None on first launch
+        if self._browser_window_geometry:
+            self.__browser_window.geometry(self._browser_window_geometry)
         self._frame = ttk.Frame(self.__browser_window)
 
         # -----------------------------
@@ -72,7 +78,6 @@ class BrowserWidget(IObserver):
 
         top = ttk.Frame(self._frame)
         top.pack(fill="x")
-
         self._thumb_canvas = tk.Canvas(
             top,
             height=170,
@@ -143,13 +148,13 @@ class BrowserWidget(IObserver):
         if self._image_paths:
             self._select_image(self._image_paths[-1].file_path)
 
-    # TODO this is not used, yet,the add_observer() call is commented out
-    # TODO maybe use it in the future
     def update(self, event: str, data=None):
-        # print("===================update")
-        if event is ObserverEvents.DO_IMAGE_DELETED:
-            self.refresh_image_browser()
-        elif event is ObserverEvents.DO_IMAGE_ADDED:
+        if event in {
+            ObserverEvents.DO_IMAGE_DELETED,
+            ObserverEvents.DO_IMAGE_ADDED,
+            ObserverEvents.REFRESH_FIRST_IMAGE_INDEX,
+            ObserverEvents.RELOAD_PICS_FOLDER,
+        }:
             self.refresh_image_browser()
 
     def get_normalised_geometry(self):
@@ -178,8 +183,8 @@ class BrowserWidget(IObserver):
     # this method refreshes the browser image thumb previews, so it does not do any folder walking
     # it is simple enough so adding or removing functions are redundant
     def refresh_image_browser(self):
-        # self.load_images(self.app.viewmodel.get_image_list())
-        self._image_paths = self._app.viewmodel.get_image_list()
+        self._image_paths = self.viewmodel.get_items()
+        self._selected_index = self.viewmodel.get_selected_index()
         for idx in list(self._visible_items):
             self._remove_thumbnail(idx)
 
@@ -188,52 +193,60 @@ class BrowserWidget(IObserver):
 
         self._update_visible_thumbnails()
 
-        if self._image_paths:
-            self._select_image(self._image_paths[-1].file_path)
+        if self._selected_index is not None and self._selected_index < len(self._image_paths):
+            self._selected_path = self._image_paths[self._selected_index].file_path
+            self._load_preview_image(self._selected_path)
+            self._scroll_to_selected_thumbnail()
+        elif self._image_paths and self._selected_path is None:
+            self._selected_path = self._image_paths[-1].file_path
+            self._selected_index = len(self._image_paths) - 1
+            self._load_preview_image(self._selected_path)
+            self._scroll_to_selected_thumbnail()
 
     def delete_image(self, path):
-        # if not messagebox.askyesno("Delete", f"Move\n\n{path.name}\n\nto the Recycle Bin?"):
-            # return
-        self._app.viewmodel.delete_image(path)
+        self.viewmodel.delete_image(path)
 
     def _save_browser_window_geometry(self):
         if not self.__browser_window:
             return
-        # TODO i believe try here is nonsense now
         try:
             self._browser_window_geometry = self.__browser_window.geometry()
-            self._app.update_browser_size(self._browser_window_geometry)
-        except Exception as e:
+            self.viewmodel.browser_geometry = self._browser_window_geometry
+        except OSError as e:
             logger.error(f"_save_browser..{e}")
 
+    def _show_missing_file_warning(self, path):
+        messagebox.showwarning(
+            "Screenshot not found",
+            f"Missing file:\n{path}\n\nRefreshing browser..."
+        )
 
-
-    def _on_browser_window_configure(self, event=None):
+    def _on_browser_window_configure(self, _event=None):
         if not self.__browser_window or not self.__browser_window.winfo_ismapped():
             return
         self._save_browser_window_geometry()
 
     def _position_browser_window(self):
-        if not self.__browser_window or not self._app.root.winfo_ismapped():
+        if not self.__browser_window or not self.root.winfo_ismapped():
             return
 
-        self._app.root.update_idletasks()
+        self.root.update_idletasks()
         self.__browser_window.update_idletasks()
 
         if self._browser_window_geometry:
             self.__browser_window.geometry(self._browser_window_geometry)
             return
 
-        x = self._app.root.winfo_rootx() + self._app.root.winfo_width() + 8
-        y = self._app.root.winfo_rooty()
+        x = self.root.winfo_rootx() + self.root.winfo_width() + 8
+        y = self.root.winfo_rooty()
         width = 520
-        height = min(800, self._app.root.winfo_screenheight() - 40)
+        height = min(800, self.root.winfo_screenheight() - 40)
 
-        if x + width > self._app.root.winfo_screenwidth():
-            x = max(10, self._app.root.winfo_screenwidth() - width - 10)
+        if x + width > self.root.winfo_screenwidth():
+            x = max(10, self.root.winfo_screenwidth() - width - 10)
 
-        if y + height > self._app.root.winfo_screenheight():
-            y = max(10, self._app.root.winfo_screenheight() - height - 10)
+        if y + height > self.root.winfo_screenheight():
+            y = max(10, self.root.winfo_screenheight() - height - 10)
 
         self._browser_window_geometry = f"{width}x{height}+{x}+{y}"
         self.__browser_window.geometry(self._browser_window_geometry)
@@ -373,10 +386,10 @@ class BrowserWidget(IObserver):
                 "delete": delete_id,
                 "photo": photo
             }
-        except Exception as exc:
+        except OSError as exc:
             logger.error(f"_create_thumb: {exc}")
 
-    def _on_preview_resize(self, event):
+    def _on_preview_resize(self, _event):
         self._update_preview_image()
 
     def _update_preview_image(self):
@@ -408,34 +421,29 @@ class BrowserWidget(IObserver):
         )
 
     def _select_image(self, path):
-        self._selected_path = path
+        if path != self._selected_path:
+            self.viewmodel.select_image(path)
+            self._selected_path = path
+            self._selected_index = self.viewmodel.get_selected_index()
+
+        self._load_preview_image(path)
+        self._update_visible_thumbnails()
+        self._scroll_to_selected_thumbnail()
+
+    def _load_preview_image(self, path):
         try:
             if self._original_image is not None:
                 self._original_image.close()
             self._original_image = Image.open(path)
-            self._preview_name.configure(
-                text=path.name
-            )
+            self._preview_name.configure(text=path.name)
             self._update_preview_image()
-
-        except (OSError, ) as e:
+        except OSError as e:
             logger.error(f"{e}")
-            self._app.auto_dissapearing_warning("Screenshot not found",
-                                               f"Missing file:\n{path}\n\nRefreshing log..."
-                                               )
+            self._show_missing_file_warning(path)
             self._preview_canvas.delete("all")
             self._preview_canvas.create_text(20, 20, anchor="nw", text=str(e))
             self._preview_name.configure(text="")
-            self._app.auto_dissapearing_warning("Screenshot not found",
-                                                           f"Missing file:\n{path}\n\nRefreshing log..."
-                                                           )
-        else:
-            try:
-                self._selected_index = get_img_entry_index_by_path(path, self._image_paths)
-            except ValueError:
-                self._selected_index = None
-            self._update_visible_thumbnails()
-            self._scroll_to_selected_thumbnail()
+            self.refresh_image_browser()
 
     # pylint: disable=unused-argument
     def _open_external_viewer(self, event=None):
@@ -443,8 +451,8 @@ class BrowserWidget(IObserver):
             os.startfile(self._selected_path)
             return
 
-        self._app.auto_dissapearing_warning("File not found",
-                                           f"The image file no longer exists:\n{self._selected_path}",
-                                           timeout=4000
-                                           )
-        # self._app.cmd_refresh_pics_list()
+        messagebox.showwarning(
+            "File not found",
+            f"The image file no longer exists:\n{self._selected_path}"
+        )
+        self.refresh_image_browser()

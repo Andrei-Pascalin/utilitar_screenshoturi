@@ -10,15 +10,18 @@ from tkinter import messagebox
 
 from core.logger import get_logger
 from core.observer import IObserver
+from core.enums import ObserverEvents
 from models.image_entry import ImageEntry
+from viewmodels.log_viewmodel import LogViewModel
 
 logger = get_logger(__name__)
 
 class ScreenshotLogWidget(IObserver):
     """Custom log widget with buttons to open file explorer for each entry"""
-    def __init__(self, parent, app_instance):
+    def __init__(self, parent, viewmodel:LogViewModel):
         self.parent = parent
-        self.app = app_instance
+        self.viewmodel = viewmodel
+        self.viewmodel.add_observer(self)
         self.entries = []
 
         # Create main container frame
@@ -49,7 +52,16 @@ class ScreenshotLogWidget(IObserver):
         self.refresh_picture_logs()
 
     def update(self,event: str, data=None):
-        pass
+        if event is ObserverEvents.DO_IMAGE_ADDED:
+            self.add_entry(data)
+            self._update_scroll_region()
+        elif event is ObserverEvents.DO_IMAGE_DELETED:
+            self.remove_entry(data)
+            self._update_scroll_region()
+        elif event is ObserverEvents.REFRESH_FIRST_IMAGE_INDEX:
+            self.refresh_first_image_index(data)
+        elif event is ObserverEvents.RELOAD_PICS_FOLDER:
+            self.refresh_picture_logs()
 
     def add_entry(self, path_str: str):
         """Add an entry with an open button and selectable text"""
@@ -111,10 +123,12 @@ class ScreenshotLogWidget(IObserver):
 
     def remove_entry(self, path):
         logger.info(f"remove_entry {path}")
-        for (entry_f, p) in self.entries:
+        for index, (entry_f, p) in enumerate(self.entries):
             if p == path:
                 entry_f.destroy()
-        # self._update_scroll_region()
+                del self.entries[index]
+                self._update_scroll_region()
+                break
 
     def clear(self):
         """Clear all entries from the log"""
@@ -125,15 +139,13 @@ class ScreenshotLogWidget(IObserver):
     def refresh_picture_logs(self):
         """Refresh log by reading all PNG files from the repository"""
         self.clear()
-        pics_list:list[ImageEntry] = self.app.viewmodel.image_repository.get_list()
+        pics_list:list[ImageEntry] = self.viewmodel.get_entries()
         try:
             if pics_list:
                 for img_entry in pics_list:
                     self.add_entry(img_entry.file_path)
-                # Update scroll region after all entries are added
                 self._update_scroll_region()
-                # messagebox.showinfo("Refresh complete", f"Found {len(self.app.pics_list)} PNG file(s).")
-        except (FileNotFoundError, FileExistsError, FloatingPointError)  as e:
+        except (FileNotFoundError, FileExistsError, FloatingPointError) as e:
             logger.error(f"refresh_picture_logs: {e}")
             messagebox.showerror("Error", f"Failed to refresh: {e}")
 
@@ -152,7 +164,7 @@ class ScreenshotLogWidget(IObserver):
                 text_widget.insert("1.0", new_img_path)
                 text_widget.config(state=tk.DISABLED)
                 text_widget.update()  # Force update to reflect changes
-                self.app.root.update_idletasks()  # Update the main window to reflect changes
+                self.parent.update_idletasks()  # Update the parent widget to reflect changes
 
                 btn.config(command=lambda: self._cmd_open_path(new_img_path))
                 return
