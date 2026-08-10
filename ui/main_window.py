@@ -12,8 +12,8 @@ from core.constants import ICON_PATH
 from core.enums import ApplicationSettingsEnum, ObserverEvents
 from core.enums import CaptureMode
 from core.logger import get_logger
-from core.observer import IObserver, Observable
-from services.notification_service import Notification, NotificationService, NotificationType
+from core.observer import IObserver
+from services.notification_service import NotificationService, NotificationType
 from viewmodels.capture_viewmodel import CaptureViewModel
 from ui.tooltip import Tooltip
 from ui.log_widget import ScreenshotLogWidget
@@ -21,7 +21,74 @@ from ui.browser_widget import BrowserWidget
 
 logger = get_logger(__name__)
 
-class MainWindow(IObserver):
+class ScreenshotObserver(IObserver):
+    def __init__(self, main_window:MainWindow):
+        super().__init__()
+        self._main_window = main_window
+
+    def update(self, event: str, data=None):
+        if event is ObserverEvents.DO_IMAGE_ADDED:
+            self._main_window.log_widget.add_entry(data)
+            self._main_window.browser_widget.refresh_image_browser()
+
+        elif event is ObserverEvents.DO_IMAGE_DELETED:
+            self._main_window.log_widget.remove_entry(data)
+            self._main_window.browser_widget.refresh_image_browser()
+
+        elif event is ObserverEvents.REFRESH_FIRST_IMAGE_INDEX:
+            self._main_window.log_widget.refresh_first_image_index(data)
+            self._main_window.browser_widget.refresh_image_browser()
+
+        elif event is ObserverEvents.RELOAD_PICS_FOLDER:
+            self._main_window.log_widget.refresh_picture_logs()
+            self._main_window.browser_widget.refresh_image_browser()
+
+class UIReactObserver(IObserver):
+    def __init__(self, main_window:MainWindow):
+        super().__init__()
+        self._main_window = main_window
+
+    def update(self, event: str, data=None):
+        if event is ObserverEvents.DO_PREPARE_UI_CAPTURE:
+            self._main_window.save_left_button.config(state="disabled")
+            self._main_window.save_right_button.config(state="disabled")
+            # Hide GUI so it is not included in the screenshot.
+            self._main_window.root.iconify()
+        elif event is ObserverEvents.DO_RESTORE_UI:
+            self._main_window.root.deiconify()
+            self._main_window.save_left_button.config(state="normal")
+            self._main_window.save_right_button.config(state="normal")
+
+class StepObserver(IObserver):
+    def __init__(self, main_window:MainWindow):
+        super().__init__()
+        self._main_window = main_window
+
+    def update(self, event: str, data=None):
+        if event is ObserverEvents.DO_STEP_UPDATED:
+            self._main_window.step_var.set(data)
+            logger.debug(f"MainWindow received STEP_UPDATED event. New step: {data}")
+        elif event is ObserverEvents.DO_INCREMENT_STEP:
+            try:
+                current = int(self._main_window.step_var.get())
+                logger.debug(f"DO INCREMENT STEP: {current + 1}")
+                self._main_window.step_var.set(str(current + 1))
+            except ValueError:
+                self._main_window.step_var.set("1")
+
+class NotificationObserver(IObserver):
+    def update(self, event: str, data=None):
+        logger.info(f"MainWindow received notification: {event}, data: {data}")
+        # TODO maybe use own auto disappearing warning for info and warning messages, but for now just use messagebox
+        # self.auto_dissapearing_warning("Notification", data, timeout=5000)
+        if data.type == NotificationType.INFO:
+            messagebox.showinfo(data.title, data.message)
+        elif data.type == NotificationType.WARNING:
+            messagebox.showwarning(data.title, data.message)
+        elif data.type == NotificationType.ERROR:
+            messagebox.showerror(data.title, data.message)
+
+class MainWindow():
 
     def __init__(self, viewmodel:CaptureViewModel, notification_service:NotificationService):
         self.viewmodel = viewmodel
@@ -35,15 +102,17 @@ class MainWindow(IObserver):
 
         self.create_gui()
 
-        self._notification_received = Observable()
-        self.notification_service.notification.add_observer(self._notification_received)
-        self._notification_received.update = self.on_notification_received
+        self._notification_receiver = NotificationObserver()
+        self.notification_service.notification.add_observer(self._notification_receiver)
 
-        # TODO maybe baby ... some other time
-        # self.step_changed = Observable()
-        # self.viewmodel.add_observer(self.step_changed)
-        # self.step_changed.update = self.on_step_updated
-        self.viewmodel.add_observer(self)
+        self._step_change_receiver = StepObserver(self)
+        self.viewmodel.add_observer(self._step_change_receiver)
+
+        self._ui_react_receiver = UIReactObserver(self)
+        self.viewmodel.add_observer(self._ui_react_receiver)
+
+        self._screenshot_change_receiver = ScreenshotObserver(self)
+        self.viewmodel.add_observer(self._screenshot_change_receiver)
 
         # Register a system-wide hotkey listener in background
         try:
@@ -57,56 +126,6 @@ class MainWindow(IObserver):
 
     def run(self):
         self.root.mainloop()
-
-    # def on_step_updated(self, new_step):
-    #     pass
-
-    def on_notification_received(self, event:ObserverEvents, data:Notification=None):
-        logger.info(f"MainWindow received notification: {event}, data: {data}")
-        # TODO maybe use own auto disappearing warning for info and warning messages, but for now just use messagebox
-        # self.auto_dissapearing_warning("Notification", data, timeout=5000)
-        if data.type == NotificationType.INFO:
-            messagebox.showinfo(data.title, data.message)
-        elif data.type == NotificationType.WARNING:
-            messagebox.showwarning(data.title, data.message)
-        elif data.type == NotificationType.ERROR:
-            messagebox.showerror(data.title, data.message)
-
-    def update(self, event: str, data=None):
-        """
-        Observer callback.
-        """
-        if event is ObserverEvents.DO_STEP_UPDATED:
-            self.step_var.set(data)
-            logger.debug(f"MainWindow received STEP_UPDATED event. New step: {self.viewmodel.settings_service.get_setting('step')}")
-        elif event is ObserverEvents.DO_PREPARE_UI_CAPTURE:
-            self.save_left_button.config(state="disabled")
-            self.save_right_button.config(state="disabled")
-            # Hide GUI so it is not included in the screenshot.
-            self.root.iconify()
-        elif event is ObserverEvents.DO_RESTORE_UI:
-            self.root.deiconify()
-            self.save_left_button.config(state="normal")
-            self.save_right_button.config(state="normal")
-        elif event is ObserverEvents.DO_INCREMENT_STEP:
-            try:
-                current = int(self.step_var.get())
-                logger.debug(f"DO INCREMENT STEP: {current + 1}")
-                self.step_var.set(str(current + 1))
-            except ValueError:
-                self.step_var.set("1")
-        elif event is ObserverEvents.DO_IMAGE_ADDED:
-            self.log_widget.add_entry(data)
-            self.browser_widget.refresh_image_browser()
-        elif event is ObserverEvents.DO_IMAGE_DELETED:
-            self.log_widget.remove_entry(data)
-            self.browser_widget.refresh_image_browser()
-        elif event is ObserverEvents.REFRESH_FIRST_IMAGE_INDEX:
-            self.log_widget.refresh_first_image_index(data)
-            self.browser_widget.refresh_image_browser()
-        elif event is ObserverEvents.RELOAD_PICS_FOLDER:
-            self.log_widget.refresh_picture_logs()
-            self.browser_widget.refresh_image_browser()
 
     def on_close(self):
         logger.debug("MainWindow.on_close called. Saving settings and closing application........")

@@ -108,13 +108,14 @@ class ScreenshotLogWidget(IObserver):
         text_widget.bind("<Leave>", on_leave)
 
         self.entries.append((entry_frame, path_str))
+        self._update_scroll_region()
 
     def remove_entry(self, path):
         logger.info(f"remove_entry {path}")
         for (entry_f, p) in self.entries:
             if p == path:
                 entry_f.destroy()
-        # self._update_scroll_region()
+        self._update_scroll_region()
 
     def clear(self):
         """Clear all entries from the log"""
