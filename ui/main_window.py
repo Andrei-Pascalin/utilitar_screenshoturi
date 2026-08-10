@@ -9,84 +9,17 @@ from tkinter import messagebox
 from commands.capture_commands import CaptureWindowCommand, DecrementStepCommand, IncrementStepCommand, ReloadPicsCommand
 from commands.zip_commands import CreateZipCommand
 from core.constants import ICON_PATH
-from core.enums import ApplicationSettingsEnum, ObserverEvents
+from core.enums import ApplicationSettingsEnum
 from core.enums import CaptureMode
 from core.logger import get_logger
-from core.observer import IObserver
-from services.notification_service import NotificationService, NotificationType
+from core.observer import NotificationObserver, ScreenshotObserver, StepObserver, UIReactObserver
+from services.notification_service import NotificationService
 from viewmodels.capture_viewmodel import CaptureViewModel
 from ui.tooltip import Tooltip
 from ui.log_widget import ScreenshotLogWidget
 from ui.browser_widget import BrowserWidget
 
 logger = get_logger(__name__)
-
-class ScreenshotObserver(IObserver):
-    def __init__(self, main_window:MainWindow):
-        super().__init__()
-        self._main_window = main_window
-
-    def update(self, event: str, data=None):
-        if event is ObserverEvents.DO_IMAGE_ADDED:
-            self._main_window.log_widget.add_entry(data)
-            self._main_window.browser_widget.refresh_image_browser()
-
-        elif event is ObserverEvents.DO_IMAGE_DELETED:
-            self._main_window.log_widget.remove_entry(data)
-            self._main_window.browser_widget.refresh_image_browser()
-
-        elif event is ObserverEvents.REFRESH_FIRST_IMAGE_INDEX:
-            self._main_window.log_widget.refresh_first_image_index(data)
-            self._main_window.browser_widget.refresh_image_browser()
-
-        elif event is ObserverEvents.RELOAD_PICS_FOLDER:
-            self._main_window.log_widget.refresh_picture_logs()
-            self._main_window.browser_widget.refresh_image_browser()
-
-class UIReactObserver(IObserver):
-    def __init__(self, main_window:MainWindow):
-        super().__init__()
-        self._main_window = main_window
-
-    def update(self, event: str, data=None):
-        if event is ObserverEvents.DO_PREPARE_UI_CAPTURE:
-            self._main_window.save_left_button.config(state="disabled")
-            self._main_window.save_right_button.config(state="disabled")
-            # Hide GUI so it is not included in the screenshot.
-            self._main_window.root.iconify()
-        elif event is ObserverEvents.DO_RESTORE_UI:
-            self._main_window.root.deiconify()
-            self._main_window.save_left_button.config(state="normal")
-            self._main_window.save_right_button.config(state="normal")
-
-class StepObserver(IObserver):
-    def __init__(self, main_window:MainWindow):
-        super().__init__()
-        self._main_window = main_window
-
-    def update(self, event: str, data=None):
-        if event is ObserverEvents.DO_STEP_UPDATED:
-            self._main_window.step_var.set(data)
-            logger.debug(f"MainWindow received STEP_UPDATED event. New step: {data}")
-        elif event is ObserverEvents.DO_INCREMENT_STEP:
-            try:
-                current = int(self._main_window.step_var.get())
-                logger.debug(f"DO INCREMENT STEP: {current + 1}")
-                self._main_window.step_var.set(str(current + 1))
-            except ValueError:
-                self._main_window.step_var.set("1")
-
-class NotificationObserver(IObserver):
-    def update(self, event: str, data=None):
-        logger.info(f"MainWindow received notification: {event}, data: {data}")
-        # TODO maybe use own auto disappearing warning for info and warning messages, but for now just use messagebox
-        # self.auto_dissapearing_warning("Notification", data, timeout=5000)
-        if data.type == NotificationType.INFO:
-            messagebox.showinfo(data.title, data.message)
-        elif data.type == NotificationType.WARNING:
-            messagebox.showwarning(data.title, data.message)
-        elif data.type == NotificationType.ERROR:
-            messagebox.showerror(data.title, data.message)
 
 class MainWindow():
 
@@ -102,7 +35,7 @@ class MainWindow():
 
         self.create_gui()
 
-        self._notification_receiver = NotificationObserver()
+        self._notification_receiver = NotificationObserver(self)
         self.notification_service.notification.add_observer(self._notification_receiver)
 
         self._step_change_receiver = StepObserver(self)
@@ -123,9 +56,20 @@ class MainWindow():
 
         self.root.bind("<Alt-z>", self.viewmodel.get_capture_shortcut_handler())
 
-
     def run(self):
         self.root.mainloop()
+
+    # TODO maybe use own auto disappearing warning for info and warning messages, but for now just use messagebox
+    # self.auto_dissapearing_warning("Notification", data, timeout=5000)
+
+    def showinfo(self, data):
+        messagebox.showinfo(data.title, data.message)
+
+    def showwarning(self, data):
+        messagebox.showwarning(data.title, data.message)
+
+    def showerror(self, data):
+        messagebox.showerror(data.title, data.message)
 
     def on_close(self):
         logger.debug("MainWindow.on_close called. Saving settings and closing application........")

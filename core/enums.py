@@ -19,6 +19,7 @@ class ApplicationSettingsEnum(StrEnum):
      app_window_name_list = auto()
      image_browser_geometry = auto()
      main_window_geometry = auto()
+    #  selected_window_name = auto()
 
 # Observer events
 class ObserverEvents(StrEnum):
