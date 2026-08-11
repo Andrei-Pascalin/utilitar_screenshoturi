@@ -1,9 +1,9 @@
+# pylint: disable=missing-docstring,line-too-long
+
 from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import re
-
-from core.logger import get_logger
 
 if TYPE_CHECKING:
     from models.image_entry import ImageEntry
@@ -14,8 +14,6 @@ INVALID_CHARS = re.compile(r'[<>:"/\\|?*]')
 
 # Limit individual folder names to reduce path-length issues.
 MAX_COMPONENT_LENGTH = 180
-
-logger = get_logger(__name__)
 
 def sanitize_name(value: str) -> str:
     """Sanitize filename/folder names"""
@@ -57,7 +55,6 @@ def extract_sci_number(sci_name: str) -> str:
 def get_img_entry_key_by_path(path, imageEntries:dict[ImageEntry]) -> str:
     # next(((k, v) for k, v in imageEntries.items() if path in v.file_path), None)
     for key, value in imageEntries.items():
-        logger.debug(f"get_img_entry_key_by_path: key={key}, value={value}, path={path}")
         if path == value.file_path:
             return key
     return None

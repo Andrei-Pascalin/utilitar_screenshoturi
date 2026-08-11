@@ -8,11 +8,10 @@ import win32con
 
 from core.logger import get_logger
 
-logger = get_logger(__name__)
-
 
 class HotkeyService:
     def __init__(self):
+        self.__logger = get_logger(__name__)
         self.root = None
         self.cmd_save_window = None
         self._hotkey_thread = None
@@ -23,7 +22,7 @@ class HotkeyService:
     # Tk bindings don't accept a direct 'Win' modifier. Bind Alt+z and
     # verify the Windows key is held using GetAsyncKeyState.
     def _on_shortcut_alt_z(self, event):
-        logger.debug(f"Received event: {event}")
+        self.__logger.debug(f"Received event: {event}")
         # pylint: disable=invalid-name
         VK_LWIN = 0x5B
         VK_RWIN = 0x5C
@@ -32,7 +31,7 @@ class HotkeyService:
             win_right = ctypes.windll.user32.GetAsyncKeyState(VK_RWIN) & 0x8000
         # pylint: disable=broad-exception-caught
         except Exception as e:
-            logger.error(f"Error occurred while checking Win key state: {e}")
+            self.__logger.error(f"Error occurred while checking Win key state: {e}")
             win_left = win_right = 0
 
         if win_left or win_right:
@@ -55,51 +54,51 @@ class HotkeyService:
                 self._hotkey_thread_id = ctypes.windll.kernel32.GetCurrentThreadId()
             # pylint: disable=broad-exception-caught
             except Exception as e:
-                logger.error(f"Error occurred while getting thread ID: {e}")
+                self.__logger.error(f"Error occurred while getting thread ID: {e}")
                 self._hotkey_thread_id = None
 
-            logger.debug(f"Listener thread started (tid={self._hotkey_thread_id})")
+            self.__logger.debug(f"Listener thread started (tid={self._hotkey_thread_id})")
 
             msg = ctypes.wintypes.MSG()
             user32_local = ctypes.windll.user32
             WM_HOTKEY = 0x0312
 
-            logger.debug("Registering Win+Alt+Z hotkey from listener thread...")
+            self.__logger.debug("Registering Win+Alt+Z hotkey from listener thread...")
             if not user32_local.RegisterHotKey(None, HOTKEY_ID, MOD_WIN | MOD_ALT, VK_Z):
-                logger.error("RegisterHotKey failed in listener")
+                self.__logger.error("RegisterHotKey failed in listener")
                 return
 
             self._hotkey_registered = True
-            logger.debug("Hotkey registered (listener)")
+            self.__logger.debug("Hotkey registered (listener)")
 
             while True:
                 ret = user32_local.GetMessageW(ctypes.byref(msg), None, 0, 0)
-                logger.debug(f"GetMessageW returned {ret}, msg={getattr(msg, 'message', None)}")
+                self.__logger.debug(f"GetMessageW returned {ret}, msg={getattr(msg, 'message', None)}")
                 if ret == 0:
-                    logger.debug("GetMessageW returned 0, exiting listener")
+                    self.__logger.debug("GetMessageW returned 0, exiting listener")
                     break
                 if ret == -1:
-                    logger.debug("GetMessageW returned -1, error, exiting listener")
+                    self.__logger.debug("GetMessageW returned -1, error, exiting listener")
                     break
 
                 if msg.message == WM_HOTKEY and msg.wParam == HOTKEY_ID:
-                    logger.debug(f"WM_HOTKEY received (wParam={msg.wParam})")
+                    self.__logger.debug(f"WM_HOTKEY received (wParam={msg.wParam})")
                     try:
-                        logger.debug("Scheduling save_window on GUI thread")
+                        self.__logger.debug("Scheduling save_window on GUI thread")
                         self.root.after(0, self.cmd_save_window)
                     # pylint: disable=broad-exception-caught
                     except Exception as e:
-                        logger.error(f"Failed to schedule save_window: {e}")
+                        self.__logger.error(f"Failed to schedule save_window: {e}")
 
                 user32_local.TranslateMessage(ctypes.byref(msg))
                 user32_local.DispatchMessageW(ctypes.byref(msg))
 
-            logger.debug("Listener thread exiting, unregistering hotkey")
+            self.__logger.debug("Listener thread exiting, unregistering hotkey")
             try:
                 user32_local.UnregisterHotKey(None, HOTKEY_ID)
             # pylint: disable=broad-exception-caught
             except Exception as e:
-                logger.error(f"Error occurred while unregistering hotkey: {e}")
+                self.__logger.error(f"Error occurred while unregistering hotkey: {e}")
 
         t = threading.Thread(target=_listener, daemon=True)
         t.start()
@@ -118,8 +117,8 @@ class HotkeyService:
         # post WM_QUIT to the listener thread to stop the GetMessage loop
         if self._hotkey_thread_id:
             try:
-                logger.debug(f"Posting WM_QUIT to thread id {self._hotkey_thread_id}")
+                self.__logger.debug(f"Posting WM_QUIT to thread id {self._hotkey_thread_id}")
                 user32.PostThreadMessageW(self._hotkey_thread_id, win32con.WM_QUIT, 0, 0)
             # pylint: disable=broad-exception-caught
             except Exception as e:
-                logger.error(f"Error occurred while posting WM_QUIT: {e}")
+                self.__logger.error(f"Error occurred while posting WM_QUIT: {e}")

@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import List, Optional
 
-from core.constants import DEFAULT_WORK_DIR
+from core.constants import DEFAULT_LOG_LEVEL, DEFAULT_WORK_DIR
 
 
 
@@ -13,6 +13,7 @@ class ApplicationSettings:
     Persistent application settings.
     Mirrors the content of settings.json.
     """
+    log_level: str = DEFAULT_LOG_LEVEL
 
     work_dir: str = DEFAULT_WORK_DIR
     rc: str = "RC01"
@@ -28,3 +29,4 @@ class ApplicationSettings:
 
     app_window_name_list: List[str] = field(default_factory=list)
     selected_window_name: Optional[str] = ""
+

@@ -9,22 +9,32 @@ from tkinter import messagebox
 from commands.capture_commands import CaptureWindowCommand, DecrementStepCommand, IncrementStepCommand, ReloadPicsCommand
 from commands.zip_commands import CreateZipCommand
 from core.constants import ICON_PATH
-from core.enums import ApplicationSettingsEnum, ObserverEvents
+from core.enums import ApplicationSettingsEnum as SETTINGS_E
 from core.enums import CaptureMode
 from core.logger import get_logger
-from core.observer import IObserver, Observable
-from services.notification_service import Notification, NotificationService, NotificationType
+from observers.notification_observer import NotificationObserver
+from observers.screenshot_observer import ScreenshotObserver
+from observers.step_observer import StepObserver
+from observers.ui_react_observer import UIReactObserver
+from services.notification_service import NotificationService, NotificationType
 from viewmodels.capture_viewmodel import CaptureViewModel
+from viewmodels.settings_viewmodel import SettingsViewModel
 from ui.tooltip import Tooltip
 from ui.log_widget import ScreenshotLogWidget
 from ui.browser_widget import BrowserWidget
 
-logger = get_logger(__name__)
 
-class MainWindow(IObserver):
+class MainWindow():
 
-    def __init__(self, viewmodel:CaptureViewModel, notification_service:NotificationService):
-        self.viewmodel = viewmodel
+    def __init__(self,
+                 capture_viewmodel:CaptureViewModel,
+                 settings_viewmodel: SettingsViewModel,
+                 notification_service:NotificationService):
+        self.capture_vm = capture_viewmodel
+        self.settings_vm = settings_viewmodel
+
+        self.__logger = get_logger(__name__)
+
         self.notification_service = notification_service
 
         self.root = tk.Tk()
@@ -35,36 +45,34 @@ class MainWindow(IObserver):
 
         self.create_gui()
 
-        self._notification_received = Observable()
-        self.notification_service.notification.add_observer(self._notification_received)
-        self._notification_received.update = self.on_notification_received
+        self._notification_receiver = NotificationObserver(self)
+        self.notification_service.notification.add_observer(self._notification_receiver)
 
-        # TODO maybe baby ... some other time
-        # self.step_changed = Observable()
-        # self.viewmodel.add_observer(self.step_changed)
-        # self.step_changed.update = self.on_step_updated
-        self.viewmodel.add_observer(self)
+        self._step_change_receiver = StepObserver(self)
+        self.settings_vm.add_observer(self._step_change_receiver)
+
+        self._ui_react_receiver = UIReactObserver(self)
+        self.capture_vm.add_observer(self._ui_react_receiver)
+
+        self._screenshot_change_receiver = ScreenshotObserver(self)
+        self.capture_vm.add_observer(self._screenshot_change_receiver)
 
         # Register a system-wide hotkey listener in background
         try:
-            self.viewmodel.register_hotkeys(self.root)
+            self.capture_vm.register_hotkeys(self.root)
         except Exception as e:
-            logger.error(f"ERROR... HOTKEY: {e}")
+            self.__logger.error(f"ERROR... HOTKEY: {e}")
             messagebox.showerror("Error", f'Failed to register system hotkey. Hotkey functionality will be disabled.\n\n{e}')
 
-        self.root.bind("<Alt-z>", self.viewmodel.get_capture_shortcut_handler())
-
+        self.root.bind("<Alt-z>", self.capture_vm.get_capture_shortcut_handler())
 
     def run(self):
         self.root.mainloop()
 
-    # def on_step_updated(self, new_step):
-    #     pass
+    # TODO maybe use own auto disappearing warning for info and warning messages, but for now just use messagebox
+    # self.auto_dissapearing_warning("Notification", data, timeout=5000)
 
-    def on_notification_received(self, event:ObserverEvents, data:Notification=None):
-        logger.info(f"MainWindow received notification: {event}, data: {data}")
-        # TODO maybe use own auto disappearing warning for info and warning messages, but for now just use messagebox
-        # self.auto_dissapearing_warning("Notification", data, timeout=5000)
+    def show_notification(self, data):
         if data.type == NotificationType.INFO:
             messagebox.showinfo(data.title, data.message)
         elif data.type == NotificationType.WARNING:
@@ -72,58 +80,21 @@ class MainWindow(IObserver):
         elif data.type == NotificationType.ERROR:
             messagebox.showerror(data.title, data.message)
 
-    def update(self, event: str, data=None):
-        """
-        Observer callback.
-        """
-        if event is ObserverEvents.DO_STEP_UPDATED:
-            self.step_var.set(data)
-            logger.debug(f"MainWindow received STEP_UPDATED event. New step: {self.viewmodel.settings_service.get_setting('step')}")
-        elif event is ObserverEvents.DO_PREPARE_UI_CAPTURE:
-            self.save_left_button.config(state="disabled")
-            self.save_right_button.config(state="disabled")
-            # Hide GUI so it is not included in the screenshot.
-            self.root.iconify()
-        elif event is ObserverEvents.DO_RESTORE_UI:
-            self.root.deiconify()
-            self.save_left_button.config(state="normal")
-            self.save_right_button.config(state="normal")
-        elif event is ObserverEvents.DO_INCREMENT_STEP:
-            try:
-                current = int(self.step_var.get())
-                logger.debug(f"DO INCREMENT STEP: {current + 1}")
-                self.step_var.set(str(current + 1))
-            except ValueError:
-                self.step_var.set("1")
-        elif event is ObserverEvents.DO_IMAGE_ADDED:
-            self.log_widget.add_entry(data)
-            self.browser_widget.refresh_image_browser()
-        elif event is ObserverEvents.DO_IMAGE_DELETED:
-            self.log_widget.remove_entry(data)
-            self.browser_widget.refresh_image_browser()
-        elif event is ObserverEvents.REFRESH_FIRST_IMAGE_INDEX:
-            self.log_widget.refresh_first_image_index(data)
-            self.browser_widget.refresh_image_browser()
-        elif event is ObserverEvents.RELOAD_PICS_FOLDER:
-            self.log_widget.refresh_picture_logs()
-            self.browser_widget.refresh_image_browser()
-
     def on_close(self):
-        logger.debug("MainWindow.on_close called. Saving settings and closing application........")
-        self.viewmodel.update_settings_from_ui(
+        self.__logger.debug("MainWindow.on_close called. Saving settings and closing application........")
+        self.settings_vm.update_settings(
             work_dir=self.work_dir_var.get(),
             rc=self.rc_var.get(),
             sci=self.sci_var.get(),
             step=int(self.step_var.get()),
             image_browser_geometry=self.browser_widget.get_normalised_geometry(),
             main_window_geometry=self.root.geometry(),
-            window_name=self.app_window_name_var.get().strip(),
             create_step_folder=self.create_step_folder_var.get(),
             auto_increment_step=self.auto_increment_step_var.get(),
             step_no_index_delimiter=self.step_no_index_delimiter_var.get()
         )
 
-        self.viewmodel.save_settings()
+        self.settings_vm.save_settings()
         self.root.destroy()
 
     def auto_dissapearing_warning(self, title, message, timeout=5000):
@@ -258,7 +229,7 @@ class MainWindow(IObserver):
             validatecommand=vcmd,
         ).grid(row=0, column=2)
 
-        # - / + step buttons
+        # - / + step buttonsv (decrement / indrement step no.)
         frame_adjust = ttk.Frame(self.left_frame)
         frame_adjust.pack(fill="x", padx=PAD, pady=4)
 
@@ -348,45 +319,44 @@ class MainWindow(IObserver):
         self.browser_widget.create_gui()
         self.root.update_idletasks()
 
-        self.root.geometry(self.viewmodel.settings_service.get_setting(ApplicationSettingsEnum.main_window_geometry))
+        self.root.geometry(self.settings_vm.main_window_geometry)
 
-        # self.viewmodel.add_observer(self.browser_widget)
-        # self.viewmodel.add_observer(self.log_widget)
-
-
-    def update_browser_size(self, geometry):
-        self.viewmodel.update_browser_size(geometry)
 
     # ------------------------------------------------------------------
     # Private
     # ------------------------------------------------------------------
 
     def _create_variables(self):
-        self.work_dir_var = tk.StringVar(value=self.viewmodel.settings_service.get_setting("work_dir"))
-        self.rc_var = tk.StringVar(value=self.viewmodel.settings_service.get_setting("rc"))
-        self.sci_var = tk.StringVar(value=self.viewmodel.settings_service.get_setting("sci"))
-        self.step_var = tk.StringVar(value=self.viewmodel.settings_service.get_setting("step"))
+        self.work_dir_var = tk.StringVar(value=self.settings_vm.work_dir)
+        self.rc_var = tk.StringVar(value=self.settings_vm.rc)
+        self.sci_var = tk.StringVar(value=self.settings_vm.sci)
+        self.step_var = tk.StringVar(value=str(self.settings_vm.step))
 
         # Initialize window name from list or use default
-        self.window_name_list = self.viewmodel.settings_service.get_setting("app_window_name_list")
-        default_window_name = self.window_name_list[0] if self.window_name_list else "SMARTCataract DX"
+        self.window_name_list = self.settings_vm.app_window_name_list
+        default_window_name = self.settings_vm.selected_window_name or (self.window_name_list[0] if self.window_name_list else "SMARTCataract DX")
         self.app_window_name_var = tk.StringVar(value=default_window_name)
 
-        self.create_step_folder_var = tk.BooleanVar(value=self.viewmodel.settings_service.get_setting("create_step_folder"))
-        self.auto_increment_step_var = tk.BooleanVar(value=self.viewmodel.settings_service.get_setting("auto_increment_step"))
-        self.step_no_index_delimiter_var = tk.StringVar(value=self.viewmodel.settings_service.get_setting("step_no_index_delimiter"))
+        self.create_step_folder_var = tk.BooleanVar(value=self.settings_vm.create_step_folder)
+        self.auto_increment_step_var = tk.BooleanVar(value=self.settings_vm.auto_increment_step)
+        self.step_no_index_delimiter_var = tk.StringVar(value=self.settings_vm.step_no_index_delimiter)
 
-        self.step_var.trace_add("write", lambda *args: self.viewmodel.update_crt_step_from_ui(step=int(self.step_var.get()) if self.step_var.get().isdigit() else 1))
-        self.rc_var.trace_add("write", lambda *args: self.viewmodel.update_rc(self.rc_var.get()))
-        self.sci_var.trace_add("write", lambda *args: self.viewmodel.update_sci(self.sci_var.get()))
-        self.work_dir_var.trace_add("write", lambda *args: self.viewmodel.update_work_dir(self.work_dir_var.get()))
-        self.app_window_name_var.trace_add("write", lambda *args: self.viewmodel.update_app_window_name(self.app_window_name_var.get().strip()))
-        self.auto_increment_step_var.trace_add("write", lambda *args: self.viewmodel.update_auto_increment_step())
+        self.create_step_folder_var.trace_add("write", lambda *args: setattr(self.settings_vm, SETTINGS_E.CREATE_STEP_FOLDER, self.create_step_folder_var.get()))
+        self.step_var.trace_add("write", lambda *args: self._on_step_var_changed())
+        self.rc_var.trace_add("write", lambda *args: setattr(self.settings_vm, SETTINGS_E.RC, self.rc_var.get()))
+        self.sci_var.trace_add("write", lambda *args: setattr(self.settings_vm, SETTINGS_E.SCI, self.sci_var.get()))
+        self.work_dir_var.trace_add("write", lambda *args: setattr(self.settings_vm, SETTINGS_E.WORK_DIR, self.work_dir_var.get()))
+        self.app_window_name_var.trace_add("write", lambda *args: setattr(self.settings_vm, SETTINGS_E.SELECTED_WINDOW_NAME, self.app_window_name_var.get().strip()))
+        self.auto_increment_step_var.trace_add("write", lambda *args: setattr(self.settings_vm, SETTINGS_E.AUTO_INCREMENT_STEP, self.auto_increment_step_var.get()))
+
+    def _on_step_var_changed(self):
+        raw_value = self.step_var.get()
+        self.settings_vm.step = int(raw_value) if raw_value.isdigit() else 1
 
     def _create_commands(self):
-        self.capture_cmd = CaptureWindowCommand(self.viewmodel).execute
-        self.reload_pics_list_cmd = ReloadPicsCommand(self.viewmodel).execute
-        self.create_zip_cmd = CreateZipCommand(self.viewmodel).execute
+        self.capture_cmd = CaptureWindowCommand(self.capture_vm).execute
+        self.reload_pics_list_cmd = ReloadPicsCommand(self.capture_vm).execute
+        self.create_zip_cmd = CreateZipCommand(self.capture_vm).execute
 
-        self.increment_step_cmd = IncrementStepCommand(self.viewmodel).execute
-        self.decrement_step_cmd = DecrementStepCommand(self.viewmodel).execute
+        self.increment_step_cmd = IncrementStepCommand(self.settings_vm).execute
+        self.decrement_step_cmd = DecrementStepCommand(self.settings_vm).execute

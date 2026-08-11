@@ -1,17 +1,19 @@
 {
+  "log_level": "INFO",
   "work_dir": "C:\\Liamis_testing2",
   "rc": "RC0101",
-  "sci": "sci_1",
-  "step": 4,
-  "auto_increment_step": false,
+  "sci": "sci_2",
+  "step": 18,
+  "auto_increment_step": true,
   "create_step_folder": true,
   "step_no_index_delimiter": ".",
   "app_window_name_list": [
-    "SMARTCataract",
+    "SIM_metior",
+    "SIM_etior",
+    "SIM_Metior",
     "Andrei_VM_RC01",
-    "Windows PowerShell",
     "scdx_CLIENT"
   ],
-  "image_browser_geometry": "1016x664+1387+296",
-  "main_window_geometry": "1016x664+155+248"
+  "image_browser_geometry": "773x522+825+332",
+  "main_window_geometry": "602x582+161+108"
 }

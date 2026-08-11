@@ -52,11 +52,19 @@ Descriere scurtă a capabilităților
 
 import sys
 import ctypes
+import logging
 
 from app import MyApp
-from core.logger import get_logger
 
-logger = get_logger(__name__)
+
+logging.basicConfig(
+        level=logging.DEBUG,
+        format=(
+            "<--bootstrap--> | %(levelname)-8s | %(name)s | "
+            "%(filename)s:%(lineno)d | %(funcName)s() | %(message)s")
+    )
+
+logger = logging.getLogger("bootstrap")
 
 MUTEX_NAME = "Singleton_Utilitar_Screenshoturi"
 
@@ -72,8 +80,7 @@ if ctypes.windll.kernel32.GetLastError() == ERROR_ALREADY_EXISTS:
 
 def main():
     """Main entry point"""
-    app = MyApp()
-    # app.create_gui()
+    app = MyApp(logger)
     app.run()
 
 

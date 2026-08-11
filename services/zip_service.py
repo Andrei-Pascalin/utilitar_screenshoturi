@@ -10,21 +10,19 @@ from services.notification_service import NotificationService
 from services.settings_service import SettingsService
 
 
-logger = get_logger(__name__)
-
-
 class ZipService:
-    def __init__(self, settings_service:SettingsService, notification_service:NotificationService):
+    def __init__(self, notification_service:NotificationService):
         self.zip_file_path = None
-        self.settings_service = settings_service
+        self.settings_service = SettingsService()
         self.notification_service = notification_service
+        self.__logger = get_logger(__name__)
 
     def create_zip(self, images):
         try:
-            work_dir = Path(self.settings_service.get_setting(ApplicationSettingsEnum.work_dir))
+            work_dir = Path(self.settings_service.get_setting(ApplicationSettingsEnum.WORK_DIR))
 
-            sci = self.settings_service.get_setting(ApplicationSettingsEnum.sci)
-            rc = self.settings_service.get_setting(ApplicationSettingsEnum.rc)
+            sci = self.settings_service.get_setting(ApplicationSettingsEnum.SCI)
+            rc = self.settings_service.get_setting(ApplicationSettingsEnum.RC)
 
             # Build paths
             rc_path = work_dir.joinpath(rc)
@@ -45,10 +43,10 @@ class ZipService:
                     arcname = file_path.relative_to(sci_path)
                     zipf.write(file_path, arcname)
 
-            logger.info(f"ZIP file created: {zip_path}")
+            self.__logger.info(f"ZIP file created: {zip_path}")
         # pylint: disable=broad-exception-caught
         except Exception as e:
-            logger.exception(f"Error creating ZIP: {e}", e)
+            self.__logger.exception(f"Error creating ZIP: {e}", e)
             raise RuntimeError(e) from e
         else:
             return zip_path

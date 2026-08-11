@@ -8,24 +8,26 @@ class CaptureMode(StrEnum):
 
 # str mai jos e adaugat ca sa devina campurile string a.i. cand sunt accesate sa dea direct valoarea ca string
 class ApplicationSettingsEnum(StrEnum):
-     work_dir = auto()
-     rc = auto()
-     sci = auto()
-     step = auto()
-     create_step_folder = auto()
-     auto_increment_step = auto()
-     step_no_index_delimiter = auto()
-     browser_visible = auto()
-     app_window_name_list = auto()
-     image_browser_geometry = auto()
-     main_window_geometry = auto()
+    LOG_LEVEL = auto()
+    WORK_DIR = auto()
+    RC = auto()
+    SCI = auto()
+    STEP = auto()
+    CREATE_STEP_FOLDER = auto()
+    AUTO_INCREMENT_STEP = auto()
+    STEP_NO_INDEX_DELIMITER = auto()
+    BROWSER_VISIBLE = auto()
+    APP_WINDOW_NAME_LIST = auto()
+    IMAGE_BROWSER_GEOMETRY = auto()
+    MAIN_WINDOW_GEOMETRY = auto()
+    SELECTED_WINDOW_NAME = auto()
 
 # Observer events
 class ObserverEvents(StrEnum):
     DO_STEP_UPDATED = auto()
     DO_PREPARE_UI_CAPTURE = auto()
     DO_RESTORE_UI = auto()
-    DO_INCREMENT_STEP = auto()
+    # DO_INCREMENT_STEP = auto()
     DO_IMAGE_DELETED = auto()
     DO_IMAGE_ADDED = auto()
     REFRESH_FIRST_IMAGE_INDEX = auto()
