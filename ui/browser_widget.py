@@ -9,7 +9,7 @@ import tkinter as tk
 from tkinter import ttk
 from PIL import Image, ImageTk
 
-from core.enums import ApplicationSettingsEnum, ObserverEvents
+from core.enums import ObserverEvents
 from core.logger import get_logger
 from core.observer import IObserver
 from utils.validation import get_img_entry_index_by_path
@@ -19,9 +19,10 @@ if TYPE_CHECKING:
     from ui.main_window import MainWindow
     from models.image_entry import ImageEntry
 
-logger = get_logger(__name__)
-
 # TODO aista are nevoie de ceva review mai serios, fac cam multă vrăjeala pe ici pe colo
+# TODO imbunatatire:
+# TODO 1. trimit doar root-ul din main_window, rezolv poate si eventualele dependinte circulare
+# TODO 2. adaug un viewmodel separat poate pentru imagini sau trimit ca param si capture_viewmodel ca sa nu folosesc din main_window
 class BrowserWidget(IObserver):
     """
     Displays captured images and allows basic navigation.
@@ -31,6 +32,7 @@ class BrowserWidget(IObserver):
     THUMB_H = 120
 
     def __init__(self, app:MainWindow):
+        self.__logger = get_logger(__name__)
         self._app = app
 
         self._browser_visible = False
@@ -44,13 +46,18 @@ class BrowserWidget(IObserver):
         self.__browser_window.columnconfigure(0, weight=1)
         self.__browser_window.bind("<Configure>", self._on_browser_window_configure)
 
-        self._browser_window_geometry = self._app.viewmodel.settings_service.get_setting(ApplicationSettingsEnum.image_browser_geometry)
+        self._browser_window_geometry = self._app.settings_vm.image_browser_geometry
 
-        self._image_paths:list[ImageEntry] = self._app.viewmodel.get_image_list()
+        self._image_paths:list[ImageEntry] = self._app.capture_vm.get_image_list()
 
         self._visible_items = {}
         self._selected_path = None
         self._selected_index = None
+
+        self._thumb_canvas = None
+        self._hscroll = None
+        self._preview_frame = None
+        self._preview_canvas = None
 
         self._large_thumb_photo = None
 
@@ -183,7 +190,7 @@ class BrowserWidget(IObserver):
     # it is simple enough so adding or removing functions are redundant
     def refresh_image_browser(self):
         # self.load_images(self.app.viewmodel.get_image_list())
-        self._image_paths = self._app.viewmodel.get_image_list()
+        self._image_paths = self._app.capture_vm.get_image_list()
         for idx in list(self._visible_items):
             self._remove_thumbnail(idx)
 
@@ -200,13 +207,13 @@ class BrowserWidget(IObserver):
     def delete_image(self, path):
         # if not messagebox.askyesno("Delete", f"Move\n\n{path.name}\n\nto the Recycle Bin?"):
             # return
-        self._app.viewmodel.delete_image(path)
+        self._app.capture_vm.delete_image(path)
 
     def _save_browser_window_geometry(self):
         if not self.__browser_window:
             return
         self._browser_window_geometry = self.__browser_window.geometry()
-        self._app.update_browser_size(self._browser_window_geometry)
+        self._app.settings_vm.image_browser_geometry = self._browser_window_geometry
 
     def _on_browser_window_configure(self, event=None):
         if not self.__browser_window or not self.__browser_window.winfo_ismapped():
@@ -401,7 +408,7 @@ class BrowserWidget(IObserver):
                 "photo": photo
             }
         except Exception as exc:
-            logger.error(f"_create_thumb: {exc}")
+            self.__logger.error(f"_create_thumb: {exc}")
 
     def _on_preview_resize(self, event):
         self._update_preview_image()
@@ -437,7 +444,7 @@ class BrowserWidget(IObserver):
             self._update_preview_image()
 
         except (OSError, ) as e:
-            logger.error(f"{e}")
+            self.__logger.error(f"{e}")
             self._app.auto_dissapearing_warning("Screenshot not found",
                                                f"Missing file:\n{path}\n\nRefreshing log..."
                                                )
@@ -466,4 +473,4 @@ class BrowserWidget(IObserver):
                                            f"The image file no longer exists:\n{self._selected_path}",
                                            timeout=4000
                                            )
-        # self._app.cmd_refresh_pics_list()
+

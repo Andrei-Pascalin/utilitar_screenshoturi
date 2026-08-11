@@ -14,9 +14,6 @@ from services.notification_service import NotificationService
 from services.settings_service import SettingsService
 
 
-logger = get_logger(__name__)
-
-
 class CaptureService:
     """
     Performs the actual screenshot capture.
@@ -34,10 +31,10 @@ class CaptureService:
     """
 
     def __init__(self,
-                 settings_service: SettingsService,
                  notification_service: NotificationService
                  ):
-        self.settings_service = settings_service
+        self.__logger = get_logger(__name__)
+        self.settings_service = SettingsService()
         self.notifications = notification_service
         self.sct = mss.MSS()
 
@@ -114,7 +111,7 @@ class CaptureService:
                 )
             image.save(img_path)
         except Exception as e:
-            logger.exception(f"Capture image failed: {e}")
+            self.__logger.exception(f"Capture image failed: {e}")
             raise RuntimeError(e) from e
 
     def _get_monitors(self):
@@ -143,7 +140,7 @@ class CaptureService:
                     all_windows.append(title)
         # pylint: disable=c-extension-no-member
         win32gui.EnumWindows(callback, None)
-        # logger.debug(f"[DEBUG] Found windows: {all_windows}")
+        # self.__logger.debug(f"[DEBUG] Found windows: {all_windows}")
 
         # hwnd = win32gui.FindWindow(None, window_title)
         hwnd = self._find_window(window_title)
@@ -178,8 +175,8 @@ class CaptureService:
                 return
 
             title = win32gui.GetWindowText(hwnd)
-            # logger.debug(f"[DEBUG] Checking window: '{title}'")
-            # logger.debug(f"[DEBUG] Looking for: '{partial_title}'")
+            # self.__logger.debug(f"[DEBUG] Checking window: '{title}'")
+            # self.__logger.debug(f"[DEBUG] Looking for: '{partial_title}'")
             if partial_title.lower() in title.lower():
                 result.append(hwnd)
 

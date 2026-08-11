@@ -48,9 +48,7 @@ DEFAULT_BROWSER_HEIGHT = 700
 # Logging
 # =============================================================================
 
-LOG_INFO = "INFO"
-LOG_WARNING = "WARNING"
-LOG_ERROR = "ERROR"
+DEFAULT_LOG_LEVEL = "INFO"
 
 
 # =============================================================================
@@ -74,7 +72,7 @@ if is_frozen:
     APP_DIR = exe_candidate.parent
     print(f"[DEBUG] Running as frozen executable, using {exe_candidate} for APP_DIR")
 else:
-    print(f"[DEBUG] Running as script, using __file__ for APP_DIR")
+    print("[DEBUG] Running as script, using __file__ for APP_DIR")
     APP_DIR = Path(__file__).parent
 print(f"[DEBUG] Application directory: {APP_DIR}")
 # SETTINGS_FILE = APP_DIR / "setari_utilitar_screenshoturi.json"

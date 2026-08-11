@@ -7,18 +7,28 @@ from subprocess import TimeoutExpired
 import tkinter as tk
 from tkinter import ttk
 from tkinter import messagebox
+from typing import TYPE_CHECKING
 
 from core.logger import get_logger
 from core.observer import IObserver
 from models.image_entry import ImageEntry
 
-logger = get_logger(__name__)
+# ca sa evit circular import cand vreau sa specific tipul unui obiect sau returnul unei fncții
+if TYPE_CHECKING:
+    from ui.main_window import MainWindow
+
+# TODO imbunatatire:
+# TODO 1. trimit doar root-ul din main_window, rezolv poate si eventualele dependinte circulare
+# TODO 2. adaug un viewmodel separat poate pentru imagini sau trimit ca param si capture_viewmodel ca sa nu folosesc din main_window
+
 
 class ScreenshotLogWidget(IObserver):
     """Custom log widget with buttons to open file explorer for each entry"""
-    def __init__(self, parent, app_instance):
-        self.parent = parent
-        self.app = app_instance
+    def __init__(self, parent, app_instance:MainWindow):
+        self.__logger = get_logger(__name__)
+
+        self._parent = parent
+        self._app = app_instance
         self.entries = []
 
         # Create main container frame
@@ -111,7 +121,7 @@ class ScreenshotLogWidget(IObserver):
         self._update_scroll_region()
 
     def remove_entry(self, path):
-        logger.info(f"remove_entry {path}")
+        self.__logger.info(f"remove_entry {path}")
         for (entry_f, p) in self.entries:
             if p == path:
                 entry_f.destroy()
@@ -126,7 +136,7 @@ class ScreenshotLogWidget(IObserver):
     def refresh_picture_logs(self):
         """Refresh log by reading all PNG files from the repository"""
         self.clear()
-        pics_list:list[ImageEntry] = self.app.viewmodel.image_repository.get_list()
+        pics_list:list[ImageEntry] = self._app.capture_vm.image_repository.get_list()
         try:
             if pics_list:
                 for img_entry in pics_list:
@@ -135,7 +145,7 @@ class ScreenshotLogWidget(IObserver):
                 self._update_scroll_region()
                 # messagebox.showinfo("Refresh complete", f"Found {len(self.app.pics_list)} PNG file(s).")
         except (FileNotFoundError, FileExistsError, FloatingPointError)  as e:
-            logger.error(f"refresh_picture_logs: {e}")
+            self.__logger.error(f"refresh_picture_logs: {e}")
             messagebox.showerror("Error", f"Failed to refresh: {e}")
 
     def refresh_first_image_index(self, data):
@@ -153,7 +163,7 @@ class ScreenshotLogWidget(IObserver):
                 text_widget.insert("1.0", new_img_path)
                 text_widget.config(state=tk.DISABLED)
                 text_widget.update()  # Force update to reflect changes
-                self.app.root.update_idletasks()  # Update the main window to reflect changes
+                self._app.root.update_idletasks()  # Update the main window to reflect changes
 
                 btn.config(command=lambda: self._cmd_open_path(new_img_path))
                 return
@@ -178,7 +188,7 @@ class ScreenshotLogWidget(IObserver):
             self.canvas.configure(scrollregion=bbox)
 
         # Update the parent window
-        self.parent.update()
+        self._parent.update()
 
         # Scroll to bottom using a more forceful method
         self.canvas.yview_scroll(999999, "units")

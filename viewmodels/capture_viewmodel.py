@@ -16,9 +16,6 @@ from services.zip_service import ZipService
 from viewmodels.settings_viewmodel import SettingsViewModel
 
 
-logger = get_logger(__name__)
-
-
 class CaptureViewModel(Observable):
     def __init__(self,
                  settings_viewmodel: SettingsViewModel,
@@ -30,6 +27,7 @@ class CaptureViewModel(Observable):
                  notification_service: NotificationService):
         super().__init__()
         self.settings_viewmodel = settings_viewmodel
+        self.__logger = get_logger(__name__)
         self.capture_service = capture_service
         self.image_repository = image_repository
         self.path_service=path_service
@@ -43,10 +41,10 @@ class CaptureViewModel(Observable):
         try:
             if images:
                 zip_path = self.zip_service.create_zip(images)
-                logger.info(f"Images zipped to {zip_path}")
+                self.__logger.info(f"Images zipped to {zip_path}")
                 self.notification_service.info("Zip", f"Images zipped to: {zip_path}")
             else:
-                logger.info("No images to zip.")
+                self.__logger.info("No images to zip.")
         except RuntimeError as e:
             self.notification_service.error("Zip", f"{e}")
 
@@ -63,17 +61,11 @@ class CaptureViewModel(Observable):
     def unregister_hotkeys(self):
         self.hotkey_service.unregister_system_hotkey()
 
-    def increment_step(self):
-        self.settings_viewmodel.increment_step()
-
-    def decrement_step(self):
-        self.settings_viewmodel.decrement_step()
-
     def delete_image(self, path):
         try:
             send2trash.send2trash(path)
         except (WindowsError, OSError) as exc:
-            logger.exception("Failed to delete image: %s", exc)
+            self.__logger.exception("Failed to delete image: %s", exc)
             self.notification_service.error("Capture", f"Failed to delete image: {exc}")
         else:
             self.image_repository.remove_image(path)
@@ -86,11 +78,11 @@ class CaptureViewModel(Observable):
         try:
             img_name, img_path, first_image_name_changed = self.path_service.build_output_path()
         except ValueError as e:
-            logger.error(f"Failed to build output path: {e}")
+            self.__logger.error(f"Failed to build output path: {e}")
             self.notification_service.error("Capture", f"Failed to build output path: {e}")
             return
         except RuntimeError as e:
-            logger.error(f"Unexpected error while building output path: {e}")
+            self.__logger.error(f"Unexpected error while building output path: {e}")
             self.notification_service.error("Capture", f"Unexpected error while building output path: {e}")
             return
 
@@ -103,7 +95,7 @@ class CaptureViewModel(Observable):
             else:
                 self.capture_service.capture_monitor(source, img_path)
         except RuntimeError as e:
-            logger.exception(f"Capture failed: {e}")
+            self.__logger.exception(f"Capture failed: {e}")
             self.notification_service.error("Capture", f"Capture failed: {e}")
             return
         finally:
@@ -113,7 +105,7 @@ class CaptureViewModel(Observable):
             try:
                 self.path_service.rename_first_image(first_image_name_changed)
             except RuntimeError as exc:
-                logger.warning("Could not finalize filename ordering: %s", exc)
+                self.__logger.warning("Could not finalize filename ordering: %s", exc)
                 self.notification_service.warning("Capture", f"Could not finalize filename ordering: {exc}")
 
         # if img_name:
@@ -124,8 +116,8 @@ class CaptureViewModel(Observable):
 
         # incrementează step (dacă este cazul de autoincrement)
         if self.settings_viewmodel.auto_increment_step:
-            logger.info("Incrementing step because auto_increment_step is enabled")
-            self.increment_step()
+            self.__logger.info("Incrementing step because auto_increment_step is enabled")
+            self.settings_viewmodel.increment_step()
             self.settings_viewmodel.save_settings()
 
         # notify log and browser because a new image was added

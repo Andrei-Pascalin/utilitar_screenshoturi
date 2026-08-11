@@ -1,56 +1,44 @@
 # pylint: disable=missing-docstring,line-too-long
+# pylint: disable=logging-fstring-interpolation
 
 import json
 
 from core.constants import SETTINGS_FILE
-from core.logger import get_logger
 from core.constants import DEFAULT_WORK_DIR
-from models.application_settings import ApplicationSettings
 from core.enums import ApplicationSettingsEnum as SETTINGS_E
+from models.application_settings import ApplicationSettings
 from utils.validation import validate_step
 
 
-logger = get_logger(__name__)
-
-
 class SettingsService:
+    __my_settings_instance = None
+    __initialized = False
+
+    def __new__(cls):
+        if cls.__my_settings_instance is None:
+            cls.__my_settings_instance = super().__new__(cls)
+        return cls.__my_settings_instance
+
     def __init__(self):
+        if self.__initialized:
+            return
+
+        self.__logger = None
+        # Initialization happens only once ... singleton pattern monseniore ...
         self.settings:ApplicationSettings = ApplicationSettings()
+        self.__initialized = True
+
+    def set_logger(self, logger):
+        self.__logger = logger
 
     def get_setting(self, key:SETTINGS_E):
-        logger.debug(f"Getting setting for key: {key}")
-        logger.debug(f"Current settings: {getattr(self.settings, key, 'Key not found')}")
+        self.__logger.debug(f"Getting setting for key: {key}")
+        self.__logger.debug(f"Current settings: {getattr(self.settings, key, 'Key not found')}")
         return getattr(self.settings, key, 'Key not found')
 
     def set_setting(self, key:SETTINGS_E, value):
-        logger.debug(f"Setting {key} to {value}")
+        self.__logger.debug(f"Setting {key} to {value}")
         setattr(self.settings, key, value)
-
-    def load_settings(self):
-        logger.debug(f"Loading settings from {SETTINGS_FILE}")
-        if SETTINGS_FILE.exists():
-            try:
-                with SETTINGS_FILE.open("r", encoding="utf-8") as f:
-                    settings = json.load(f, parse_float=float, parse_int=int)
-
-                    if "app_window_name_list" not in settings:
-                        settings.app_window_name_list = []
-
-                    # return settings
-                    self.settings.auto_increment_step = settings.get(SETTINGS_E.auto_increment_step, False)
-                    self.settings.create_step_folder = settings.get(SETTINGS_E.create_step_folder, True)
-                    self.settings.step_no_index_delimiter = settings.get(SETTINGS_E.step_no_index_delimiter, ".")
-                    self.settings.work_dir = settings.get(SETTINGS_E.work_dir, DEFAULT_WORK_DIR)
-                    self.settings.rc = settings.get(SETTINGS_E.rc, "RC01")
-                    self.settings.sci = settings.get(SETTINGS_E.sci, "sci_1")
-                    self.settings.step = validate_step(settings.get(SETTINGS_E.step, 1))
-                    self.settings.app_window_name_list = settings.get(SETTINGS_E.app_window_name_list, [])
-                    self.settings.image_browser_geometry = settings.get(SETTINGS_E.image_browser_geometry, None)
-                    self.settings.main_window_geometry = settings.get(SETTINGS_E.main_window_geometry, None)
-                    self.settings.selected_window_name = self.settings.app_window_name_list[0]
-            except (FileExistsError, FileNotFoundError, FloatingPointError) as e:
-                logger.warning(f"Failed to load settings {e}")
-        return self.settings
 
     def update_window_list_setting(self, current_window_name):
         window_name_list = self.settings.app_window_name_list
@@ -66,12 +54,13 @@ class SettingsService:
         self.settings.selected_window_name = current_window_name
 
     def save_settings(self):
-        logger.debug(f"Saving settings to {SETTINGS_FILE}")
-        logger.debug(f"Current settings: {self.settings}")
+        self.__logger.debug(f"Saving settings to {SETTINGS_FILE}")
+        self.__logger.debug(f"Current settings: {self.settings}")
         try:
             with SETTINGS_FILE.open("w", encoding="utf-8") as f:
                 window_name_list = self.settings.app_window_name_list
-                json.dump({"work_dir": self.settings.work_dir,
+                json.dump({"log_level": self.settings.log_level,
+                            "work_dir": self.settings.work_dir,
                             "rc": self.settings.rc,
                             "sci": self.settings.sci,
                             "step": self.settings.step,
@@ -84,12 +73,30 @@ class SettingsService:
                             f, indent=2)
 
         except (FileExistsError, FileNotFoundError, FloatingPointError) as e:
-            logger.error(f"Failed to save settings {e}")
+            self.__logger.error("Failed to save settings %s", e)
 
+    def load_settings(self) -> None:
+        self.__logger.debug("Loading settings from %s", SETTINGS_FILE)
+        if SETTINGS_FILE.exists():
+            try:
+                with SETTINGS_FILE.open("r", encoding="utf-8") as f:
+                    settings = json.load(f, parse_float=float, parse_int=int)
 
-    def increment_step(self):
-        logger.debug(f"Current step type: {type(self.settings.step)}")
-        self.settings.step = self.settings.step + 1
+                    if "app_window_name_list" not in settings:
+                        settings.app_window_name_list = []
 
-    def decrement_step(self):
-        self.settings.step = validate_step(self.settings.step - 1)
+                    # read and return settings
+                    self.settings.auto_increment_step = settings.get(SETTINGS_E.AUTO_INCREMENT_STEP, False)
+                    self.settings.create_step_folder = settings.get(SETTINGS_E.CREATE_STEP_FOLDER, True)
+                    self.settings.step_no_index_delimiter = settings.get(SETTINGS_E.STEP_NO_INDEX_DELIMITER, ".")
+                    self.settings.work_dir = settings.get(SETTINGS_E.WORK_DIR, DEFAULT_WORK_DIR)
+                    self.settings.rc = settings.get(SETTINGS_E.RC, "RC01")
+                    self.settings.sci = settings.get(SETTINGS_E.SCI, "sci_1")
+                    self.settings.step = validate_step(settings.get(SETTINGS_E.STEP, 1))
+                    self.settings.app_window_name_list = settings.get(SETTINGS_E.APP_WINDOW_NAME_LIST, [])
+                    self.settings.image_browser_geometry = settings.get(SETTINGS_E.IMAGE_BROWSER_GEOMETRY, None)
+                    self.settings.main_window_geometry = settings.get(SETTINGS_E.MAIN_WINDOW_GEOMETRY, None)
+                    self.settings.selected_window_name = self.settings.app_window_name_list[0]
+                    self.settings.log_level = settings.get(SETTINGS_E.LOG_LEVEL, "INFO")
+            except (FileExistsError, FileNotFoundError, FloatingPointError) as e:
+                self.__logger.error("Failed to load settings %s", e)

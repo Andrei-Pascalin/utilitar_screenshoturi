@@ -1,29 +1,31 @@
+# pylint: disable=missing-docstring,line-too-long
+
 import time
 from pathlib import Path
 
 from core.logger import get_logger
+from core.enums import ApplicationSettingsEnum as SETTINGS_E
 
-from models.application_settings import ApplicationSettings
+from services.settings_service import SettingsService
 from utils.validation import sanitize_name
-
-logger = get_logger(__name__)
 
 
 class ScreenshotPathService:
-    def __init__(self, settings: ApplicationSettings):
-        self.settings = settings
+    def __init__(self):
+        self.settings = SettingsService()
+        self.logger = get_logger(__name__)
 
     def build_output_path(self):
         """Build and create the output path without renaming the existing first image yet."""
-        work_dir = Path(self.settings.work_dir)
+        work_dir = Path(self.settings.get_setting(SETTINGS_E.WORK_DIR))
 
         if not str(work_dir):
             raise ValueError("Work directory is required.")
 
         # Validate the raw user input first.
-        raw_rc = self.settings.rc
-        raw_sci = self.settings.sci
-        raw_step = self.settings.step
+        raw_rc = self.settings.get_setting(SETTINGS_E.RC)
+        raw_sci = self.settings.get_setting(SETTINGS_E.SCI)
+        raw_step = self.settings.get_setting(SETTINGS_E.STEP)
 
         if raw_rc == "":
             raise ValueError("RC no. cannot be empty.")
@@ -41,7 +43,7 @@ class ScreenshotPathService:
         step_folder = f"Step{raw_step}"
 
         # Create step folder only if checkbox is enabled
-        if self.settings.create_step_folder:
+        if self.settings.get_setting(SETTINGS_E.CREATE_STEP_FOLDER):
             folder = work_dir / rc / sci / step_folder
         else:
             # Create only the parent folders (RC/SCI) without the step folder
@@ -51,7 +53,7 @@ class ScreenshotPathService:
 
         # Find the next index for photos in this step
         step_number = int(raw_step)
-        delimiter = self.settings.step_no_index_delimiter
+        delimiter = self.settings.get_setting(SETTINGS_E.STEP_NO_INDEX_DELIMITER)
         prefix = f"step{step_number}{delimiter}"
 
         # Check for files without index (step1.png)

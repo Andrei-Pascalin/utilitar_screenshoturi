@@ -11,22 +11,23 @@ from core.enums import ApplicationSettingsEnum as SETTINGS_E
 from utils.validation import get_img_entry_key_by_path, sanitize_name
 
 
-logger = get_logger(__name__)
-
 class ImageRepository:
-    def __init__(self, settings_service:SettingsService, notification_service:NotificationService):
+    def __init__(self, notification_service:NotificationService):
+        self.__logger = get_logger(__name__)
         self._pics_list = {}
-        self._settings_service = settings_service
+        self._settings_service = SettingsService()
         self._notification_service = notification_service
         self._build_pics_list()
 
     def add_image(self, image:ImageEntry):
+        self.__logger.debug(f"added a new image: {image}")
         self._pics_list[image.file_name] = image
 
     def get_image(self, name):
         return self._pics_list.get(name)
 
     def remove_image(self, path):
+        self.__logger.debug(f"remove image: {path}")
         img_entry_2_remove = get_img_entry_key_by_path(path, self._pics_list)
         self._pics_list.pop(img_entry_2_remove, None)
 
@@ -38,8 +39,9 @@ class ImageRepository:
         self._build_pics_list()
 
     def refresh_first_image_index(self, new_img_path:Path):
-        old_key = f"step{self._settings_service.get_setting(SETTINGS_E.step)}.png"
-        new_key = f"step{self._settings_service.get_setting(SETTINGS_E.step)}{SETTINGS_E.step_no_index_delimiter}1.png"
+        self.__logger.debug(f"refresh_first_image_index: {new_img_path}")
+        old_key = f"step{self._settings_service.get_setting(SETTINGS_E.STEP)}.png"
+        new_key = f"step{self._settings_service.get_setting(SETTINGS_E.STEP)}{SETTINGS_E.STEP_NO_INDEX_DELIMITER}1.png"
         new_value = ImageEntry(file_name=new_key, file_path=new_img_path)
 
         new_dict = {}
@@ -51,9 +53,10 @@ class ImageRepository:
         self._pics_list = new_dict
 
     def _build_pics_list(self)->None:
-        work_dir = Path(self._settings_service.get_setting(SETTINGS_E.work_dir))
-        raw_rc = self._settings_service.get_setting(SETTINGS_E.rc)
-        raw_sci = self._settings_service.get_setting(SETTINGS_E.sci)
+        self.__logger.debug("_build_pics_list")
+        work_dir = Path(self._settings_service.get_setting(SETTINGS_E.WORK_DIR))
+        raw_rc = self._settings_service.get_setting(SETTINGS_E.RC)
+        raw_sci = self._settings_service.get_setting(SETTINGS_E.SCI)
 
         if not raw_rc or not raw_sci:
             self._notification_service.error("Configuration", "RC and SCI names are required.")
