@@ -28,7 +28,7 @@ python -m nuitka `
     --windows-disable-console `
     --include-data-dir=resources=resources `
     --enable-plugin=tk-inter `
-    --windows-icon-from-ico="C:\Liamis_testing\scripturi\utilitar_screenshoturi\resources\icons\camera_gear2.ico" `
+    --windows-icon-from-ico="C:\Liamis_testing\scripturi\utilitar_screenshoturi_src\resources\icons\camera_gear2.ico" `
     --product-version="0.4" `
     --product-name="Utilitar Screenshoturi" `
     --output-filename="Utilitar_screenshoturi.exe" `
