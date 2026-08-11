@@ -118,7 +118,7 @@ class ScreenshotPathService:
                     time.sleep(delay)
                     continue
                 raise RuntimeError(
-                    f"Could not rename '{source}' to '{destination}'. {exc}"
+                    f"Could not rename '{source}' to '{destination}', error: {exc}"
                 ) from exc
         if last_error is not None:
             raise RuntimeError(f"Could not rename '{source}' to '{destination}'. {last_error}") from last_error

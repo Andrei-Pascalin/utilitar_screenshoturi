@@ -9,9 +9,7 @@ import tkinter as tk
 from tkinter import ttk
 from PIL import Image, ImageTk
 
-from core.enums import ObserverEvents
 from core.logger import get_logger
-from core.observer import IObserver
 from utils.validation import get_img_entry_index_by_path
 
 # ca sa evit circular import cand vreau sa specific tipul unui obiect sau returnul unei fncții
@@ -23,7 +21,7 @@ if TYPE_CHECKING:
 # TODO imbunatatire:
 # TODO 1. trimit doar root-ul din main_window, rezolv poate si eventualele dependinte circulare
 # TODO 2. adaug un viewmodel separat poate pentru imagini sau trimit ca param si capture_viewmodel ca sa nu folosesc din main_window
-class BrowserWidget(IObserver):
+class BrowserWidget():
     """
     Displays captured images and allows basic navigation.
     """
@@ -155,11 +153,77 @@ class BrowserWidget(IObserver):
     # TODO this is not used, yet,the add_observer() call is commented out
     # TODO maybe use it in the future
     def update(self, event: str, data=None):
-        # print("===================update")
-        if event is ObserverEvents.DO_IMAGE_DELETED:
-            self.refresh_image_browser()
-        elif event is ObserverEvents.DO_IMAGE_ADDED:
-            self.refresh_image_browser()
+        pass
+
+    def add_image_to_browser(self, path):
+        """Add only the newly captured image to the visible browser."""
+        if not self._browser_visible or path is None:
+            return
+
+        image_entries = self._app.capture_vm.get_image_list()
+        entry = next((item for item in image_entries if item.file_path == path), None)
+        if entry is None:
+            return
+
+        self._image_paths = image_entries
+        new_index = self._image_paths.index(entry)
+        self._update_thumb_scrollregion()
+        if new_index not in self._visible_items:
+            self._create_thumbnail(new_index)
+        self._select_image(entry.file_path)
+
+    def remove_image_from_browser(self, path):
+        """Remove only the deleted image from the visible browser."""
+        if not self._browser_visible or path is None:
+            return
+
+        deleted_index = next(
+            (index for index, entry in enumerate(self._image_paths)
+             if entry.file_path == path),
+            None
+        )
+        if deleted_index is None:
+            return
+
+        deleted_item = self._visible_items.pop(deleted_index, None)
+        if deleted_item:
+            self._thumb_canvas.delete(deleted_item["image"])
+            self._thumb_canvas.delete(deleted_item["text"])
+            self._thumb_canvas.delete(deleted_item["delete"])
+
+        shifted_items = {}
+        for index, item in self._visible_items.items():
+            new_index = index - 1 if index > deleted_index else index
+            if index > deleted_index:
+                self._thumb_canvas.move(
+                    item["image"], -self.THUMB_W, 0
+                )
+                self._thumb_canvas.move(
+                    item["text"], -self.THUMB_W, 0
+                )
+                self._thumb_canvas.move(
+                    item["delete"], -self.THUMB_W, 0
+                )
+            shifted_items[new_index] = item
+        self._visible_items = shifted_items
+        self._image_paths = self._app.capture_vm.get_image_list()
+        self._update_thumb_scrollregion()
+        self._thumb_canvas.after_idle(self._update_visible_thumbnails)
+
+        if self._selected_path == path:
+            if self._original_image is not None:
+                self._original_image.close()
+                self._original_image = None
+            self._selected_path = None
+            self._selected_index = None
+            self._large_thumb_canvas.delete("all")
+            if self._image_paths:
+                next_index = min(deleted_index, len(self._image_paths) - 1)
+                self._select_image(self._image_paths[next_index].file_path)
+            else:
+                self._large_thumb_label.configure(text="")
+        elif self._selected_index is not None and self._selected_index > deleted_index:
+            self._selected_index -= 1
 
     def get_normalised_geometry(self):
         return self._browser_window_geometry
@@ -174,9 +238,10 @@ class BrowserWidget(IObserver):
         self.__browser_window.lift()
         self.__browser_window.update_idletasks()
         self._browser_visible = True
+
         self._update_preview_image()
 
-        # self.refresh_image_browser()
+        self.refresh_image_browser()
         self._update_thumb_scrollregion()
         # width = max(len(self._image_paths) * self.THUMB_W, 1)
         # self._thumb_canvas.configure(scrollregion=(0, 0, width, 170))
@@ -189,13 +254,12 @@ class BrowserWidget(IObserver):
     # this method refreshes the browser image thumb previews, so it does not do any folder walking
     # it is simple enough so adding or removing functions are redundant
     def refresh_image_browser(self):
-        # self.load_images(self.app.viewmodel.get_image_list())
+        if not self._browser_visible:
+            return
         self._image_paths = self._app.capture_vm.get_image_list()
         for idx in list(self._visible_items):
             self._remove_thumbnail(idx)
 
-        # width = max(len(self._image_paths) * self.THUMB_W, 1)
-        # self._thumb_canvas.configure(scrollregion=(0, 0, width, 170))
         self._update_thumb_scrollregion()
 
         # self._update_visible_thumbnails()
@@ -353,14 +417,14 @@ class BrowserWidget(IObserver):
         path = self._image_paths[idx].file_path
 
         try:
-            img = Image.open(path)
-            img.thumbnail(
-                (
-                    self.THUMB_H,
-                    self.THUMB_H
+            with Image.open(path) as image:
+                image.thumbnail(
+                    (
+                        self.THUMB_H,
+                        self.THUMB_H
+                    )
                 )
-            )
-            photo = ImageTk.PhotoImage(img)
+                photo = ImageTk.PhotoImage(image.copy())
             x = (
                 idx * self.THUMB_W +
                 self.THUMB_W // 2
@@ -439,7 +503,8 @@ class BrowserWidget(IObserver):
         try:
             if self._original_image is not None:
                 self._original_image.close()
-            self._original_image = Image.open(path)
+            with Image.open(path) as image:
+                self._original_image = image.copy()
             self._large_thumb_label.configure(text=path.name)
             self._update_preview_image()
 

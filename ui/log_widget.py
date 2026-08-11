@@ -10,7 +10,6 @@ from tkinter import messagebox
 from typing import TYPE_CHECKING
 
 from core.logger import get_logger
-from core.observer import IObserver
 from models.image_entry import ImageEntry
 
 # ca sa evit circular import cand vreau sa specific tipul unui obiect sau returnul unei fncții
@@ -22,7 +21,7 @@ if TYPE_CHECKING:
 # TODO 2. adaug un viewmodel separat poate pentru imagini sau trimit ca param si capture_viewmodel ca sa nu folosesc din main_window
 
 
-class ScreenshotLogWidget(IObserver):
+class ScreenshotLogWidget():
     """Custom log widget with buttons to open file explorer for each entry"""
     def __init__(self, parent, app_instance:MainWindow):
         self.__logger = get_logger(__name__)
@@ -58,8 +57,8 @@ class ScreenshotLogWidget(IObserver):
 
         self.refresh_picture_logs()
 
-    def update(self,event: str, data=None):
-        pass
+    # def update(self,event: str, data=None):
+    #     pass
 
     def add_entry(self, path_str: str):
         """Add an entry with an open button and selectable text"""
@@ -122,9 +121,14 @@ class ScreenshotLogWidget(IObserver):
 
     def remove_entry(self, path):
         self.__logger.info(f"remove_entry {path}")
-        for (entry_f, p) in self.entries:
-            if p == path:
-                entry_f.destroy()
+        remaining_entries = []
+        for entry_f, entry_path in self.entries:
+            if entry_path == path:
+                if entry_f.winfo_exists():
+                    entry_f.destroy()
+            else:
+                remaining_entries.append((entry_f, entry_path))
+        self.entries = remaining_entries
         self._update_scroll_region()
 
     def clear(self):
@@ -150,8 +154,8 @@ class ScreenshotLogWidget(IObserver):
 
     def refresh_first_image_index(self, data):
         old_img_path, new_img_path = data
-        for (entry_f, p) in self.entries:
-            if p == old_img_path:
+        for index, (entry_f, entry_path) in enumerate(self.entries):
+            if entry_path == old_img_path and entry_f.winfo_exists():
                 inner_frame = entry_f.winfo_children()[0]
                 btn_frame = inner_frame.winfo_children()[0]
                 btn = btn_frame.winfo_children()[0]  # ← Get the Button from inside btn_frame
@@ -166,6 +170,7 @@ class ScreenshotLogWidget(IObserver):
                 self._app.root.update_idletasks()  # Update the main window to reflect changes
 
                 btn.config(command=lambda: self._cmd_open_path(new_img_path))
+                self.entries[index] = (entry_f, new_img_path)
                 return
 
 

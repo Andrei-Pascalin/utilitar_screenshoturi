@@ -331,7 +331,6 @@ class MainWindow():
         self.rc_var = tk.StringVar(value=self.settings_vm.rc)
         self.sci_var = tk.StringVar(value=self.settings_vm.sci)
         self.step_var = tk.StringVar(value=str(self.settings_vm.step))
-        # self._ignore_step_var_trace = False
 
         # Initialize window name from list or use default
         self.window_name_list = self.settings_vm.app_window_name_list
@@ -342,6 +341,7 @@ class MainWindow():
         self.auto_increment_step_var = tk.BooleanVar(value=self.settings_vm.auto_increment_step)
         self.step_no_index_delimiter_var = tk.StringVar(value=self.settings_vm.step_no_index_delimiter)
 
+        self.create_step_folder_var.trace_add("write", lambda *args: setattr(self.settings_vm, SETTINGS_E.CREATE_STEP_FOLDER, self.create_step_folder_var.get()))
         self.step_var.trace_add("write", lambda *args: self._on_step_var_changed())
         self.rc_var.trace_add("write", lambda *args: setattr(self.settings_vm, SETTINGS_E.RC, self.rc_var.get()))
         self.sci_var.trace_add("write", lambda *args: setattr(self.settings_vm, SETTINGS_E.SCI, self.sci_var.get()))

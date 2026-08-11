@@ -1,4 +1,5 @@
 # pylint: disable=missing-docstring,line-too-long
+# pylint: disable=c-extension-no-member
 
 import time
 from pathlib import Path
